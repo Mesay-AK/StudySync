@@ -1,64 +1,27 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 const userSchema = mongoose.Schema(
     {
-        email: {
-            type: String,
-            required: true,
-            unique: true},
-        userNmae: {
-            type: String,
-            required: true,
-            unique: true
-        },
-        password: {
-            type: String,
-            required: true
-        },
-        profilePic: {
-            type: String,
-            default: "",
-        },
-        newMessagePopup: {
-            type: Boolean,
-            default: true,
-        },
-        unreadMessage: {
-            type: Boolean,
-            default: false,
-        },
-        unreadNotification: {
-            type: Boolean,
-            default: false,
-        },
-        role: {
-            type: String,
-            enum: ["user", "root"],
-            default: "user",
-        },
-        resetToken: {
-            type: String,
-            default: "",
-        },
-        expireToken: {
-            type: Date,
-            default: Date.now(),
-        },
-        status: {
-            type: String,
-            enum: ["online", "offline"],
-            default: "offline",
-        },
+        email: {type: String, required: true, unique: true},
+        username: {type: String, required: true, unique: true},
+        password: {type: String, required: true},
+        profilePicture: {type: String, default: ""},
+        bio: {type: String, default: ""},
+        status: {type: String, enum: ["Online, Offline"], default: "Offline"},
+        accountType: {type: String, enum: ["user", "admin"], default: "user"},
+        resetToken: {type: String, default: ""},
         friends: [
-            {
-                type: ObjectId,
-                ref: "user",
-            },
+            {type: Schema.Types.ObjectId, ref: "User"}
         ],
+        blockedUsers:[
+            {type: Schema.Types.ObjectId, ref: "User"}
+        ],
+        
     },
     {timestamps: true}
-)
+);
 
-const User = mongoose.model("user", userSchema)
+
+const User = model("User", userSchema);
 
 export default User;
