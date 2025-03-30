@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import Message from "../models/Message.js";
 import ChatRoom from "../models/ChatRoom.js"; 
+import DirectMessage from "../models/DirectMessage.js"; 
 
 const usersOnline = new Map();
 
@@ -13,6 +14,16 @@ const setupSocket = (server) => {
     socket.on("userConnected", (userId) => {
       usersOnline.set(socket.id, userId);
       console.log(`User ${userId} connected with socket ${socket.id}`);
+    });
+
+    socket.on("sendDirectMessage", async ({ sender, receiver, content }) => {
+      const newMessage = new DirectMessage({ sender, receiver, content });
+      await newMessage.save();
+
+      const receiverSocketId = usersOnline.get(receiver);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("receiveDirectMessage", newMessage);
+      }
     });
 
     socket.on("joinPublicRoom", async ({ userId, roomId }) => {
@@ -72,7 +83,10 @@ const setupSocket = (server) => {
 
     socket.on("disconnect", () => {
       const userId = usersOnline.get(socket.id);
-      usersOnline.delete(socket.id);
+        usersOnline.forEach((value, key) => {
+        if (value === socket.id) usersOnline.delete(key);
+      });
+      
       console.log(`User ${userId} Disconnected`);
     });
   });
