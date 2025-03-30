@@ -20,6 +20,27 @@ const createRoom = async (req, res) => {
 }
 
 
+const createPrivatePoom = async (req, res) => {
+    try{
+        const {name, type, creatorId, invitedUsers} = req.body;
+        const newRoom = new ChatRoom({
+            name, 
+            type : "private", 
+            createdBy: creatorId,
+            members: [creatorId],
+            admins:[creatorId],
+            invitedUsers,
+
+        });
+
+        await newRoom.save();
+        res.status(201).json(newRoom);
+    }catch(error){
+        console.error("Error creating chat room:", error);
+        res.status(500).json({message: "Internal server error"});
+    }
+};
+
 const getChatRooms = async (req, res) => {
     try{
         const rooms = await ChatRoom.find({type:"public"});
@@ -31,10 +52,10 @@ const getChatRooms = async (req, res) => {
 }
 
 
-const joinRoom = async (req, res) => {
+const joinPublicRoom = async (req, res) => {
     try{
         const {userId, roomId} = req.body;
-        const room = await ChatRoom.findById(req.params.roomId);
+        const room = await ChatRoom.findById(roomId);
 
         if(!room) return res.status(404).json({message: "Room not found"});
 
@@ -46,6 +67,54 @@ const joinRoom = async (req, res) => {
 
     }catch(error){
         console.error("Error joining chat room:", error);
+        res.status(500).json({message: "Internal server error"});
+    }
+}
+
+const joinPrivateRoom = async (req, res) => {
+    try{
+        const {userId, roomId} = req.body;
+        const room = await ChatRoom.findById(roomId);
+
+        if(!room) return res.status(404).json({message: "Room not found"});
+
+        if (room.type === "private" && !room.invitedUsers.includes(userId)) {
+        return res.status(403).json({ error: "You are not invited to this room" });
+        }
+    
+        if(!room.members.includes(userId)) {
+            room.members.push(userId);
+            await room.save();
+        }
+        res.status(200).json({message: "Joined room successfully", room});
+    }catch(error){
+        console.error("Error joining chat room:", error);
+        res.status(500).json({message: "Internal server error"});
+    }
+
+}
+
+const inviteUsers = async (req, res) => {
+    try{
+        const {roomId,adminId, invitedUsers} = req.body;
+
+        const room = await ChatRoom.findById(roomId);
+
+        if(!room) return res.status(404).json({message: "Room not found"});
+
+        if (!room.admins.includes(adminId)) {
+        return res.status(403).json({ error: "Only admins can invite users" });
+      }
+
+        if (!room.invitedUsers.includes(inviteeId)) {
+        room.invitedUsers.push(inviteeId);
+        await room.save();
+        }
+
+        res.status(200).json({message: "Users invited successfully", room});
+
+    }catch(error){
+        console.error("Error inviting users to chat room:", error);
         res.status(500).json({message: "Internal server error"});
     }
 }

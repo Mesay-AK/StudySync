@@ -9,10 +9,12 @@ const ChatRoomSchema = new Schema(
         members: [
             {type: Schema.Types.ObjectId, ref: "User"}
         ],
+        admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
         messages: [
             {type: Schema.Types.ObjectId, ref: "Message"}
         ],
         createdBy: {type: Schema.Types.ObjectId, ref: "User"},
+        invitedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
         isDeleted: {type: Boolean, default: false},
 
     },
