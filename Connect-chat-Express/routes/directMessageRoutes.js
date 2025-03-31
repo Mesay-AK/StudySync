@@ -1,4 +1,4 @@
-import {SendMessage, GetMessages, DeleteMessage, MarkAsSeen} from "../controllers/directMessageController.js";
+import {sendMessage, getMessages, deleteMessage, markAsSeen} from "../controllers/directMessageController.js";
 import express from "express";
 
 
@@ -6,9 +6,8 @@ import express from "express";
 const router = express.Router();
 
 
-router.post("/send", SendMessage);
-router.delete("/delete/:messageId", DeleteMessage);
-router.patch("/seen/:messageId", MarkAsSeen);
-router.get("/get/:sender/:receiver", GetMessages);
-router.delete("/delete/:messageId", DeleteMessage);
-router.patch("/seen/:messageId", MarkAsSeen);
+router.post("/send", sendMessage);
+router.patch("/seen/:messageId", markAsSeen);
+router.get("/get/:sender/:receiver", getMessages);
+router.delete("/delete/:messageId", deleteMessage);
+router.get("/search", searchMessages);

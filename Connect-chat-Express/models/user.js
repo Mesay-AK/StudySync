@@ -16,7 +16,7 @@ const userSchema = mongoose.Schema(
         blockedUsers:[
             {type: Schema.Types.ObjectId, ref: "User"}
         ],
-        
+        unreadMessages: { type: Number, default: 0 },
     },
     {timestamps: true}
 );
