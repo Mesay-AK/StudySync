@@ -1,13 +1,13 @@
 import ChatRoom from "../models/ChatRoom.js";
-import Message from "../models/Message.js"; // Import Message model for fetching messages
+import Message from "../models/Message.js"; 
 
-// Create Public Room
+
 const createRoom = async (req, res) => {
     try {
         const { name, type, creatorId } = req.body;
         const newRoom = new ChatRoom({
             name,
-            type: type || "public", // Default to public
+            type: type || "public", 
             createdBy: creatorId,
             members: [creatorId],
             admins: [creatorId],
@@ -21,7 +21,7 @@ const createRoom = async (req, res) => {
     }
 };
 
-// Create Private Room
+
 const createPrivateRoom = async (req, res) => {
     try {
         const { name, creatorId, invitedUsers } = req.body;
@@ -42,7 +42,7 @@ const createPrivateRoom = async (req, res) => {
     }
 };
 
-// Get Public Chat Rooms
+
 const getChatRooms = async (req, res) => {
     try {
         const rooms = await ChatRoom.find({ type: "public" });
@@ -53,7 +53,7 @@ const getChatRooms = async (req, res) => {
     }
 };
 
-// Join Public Room
+
 const joinPublicRoom = async (req, res) => {
     try {
         const { userId, roomId } = req.body;
@@ -73,7 +73,7 @@ const joinPublicRoom = async (req, res) => {
     }
 };
 
-// Join Private Room
+
 const joinPrivateRoom = async (req, res) => {
     try {
         const { userId, roomId } = req.body;
@@ -97,7 +97,7 @@ const joinPrivateRoom = async (req, res) => {
     }
 };
 
-// Invite Users to Private Room
+
 const inviteUsers = async (req, res) => {
     try {
         const { roomId, adminId, invitedUsers } = req.body;
@@ -115,12 +115,13 @@ const inviteUsers = async (req, res) => {
         res.status(200).json({ message: "Users invited successfully", room });
 
     } catch (error) {
+
         console.error("Error inviting users:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
 
-// Leave Room
+
 const leaveRoom = async (req, res) => {
     try {
         const { userId, roomId } = req.body;
@@ -134,31 +135,36 @@ const leaveRoom = async (req, res) => {
         res.status(200).json({ message: "Left room successfully", room });
 
     } catch (error) {
+        
         console.error("Error leaving chat room:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
 
-// Delete Room
+
 const deleteRoom = async (req, res) => {
     try {
+
         const { roomId } = req.params;
         const room = await ChatRoom.findById(roomId);
 
         if (!room) return res.status(404).json({ message: "Room not found" });
 
         await room.deleteOne();
+
         res.status(200).json({ message: "Room deleted successfully" });
 
     } catch (error) {
+
         console.error("Error deleting chat room:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
 
-// Get Room Messages
+
 const getRoomMessages = async (req, res) => {
     try {
+
         const { roomId } = req.params;
         const messages = await Message.find({ chatRoomId: roomId }).sort({ createdAt: 1 });
 
@@ -172,7 +178,7 @@ const getRoomMessages = async (req, res) => {
     }
 };
 
-// Search Messages in a Chat Room
+
 const searchRoomMessages = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -184,10 +190,12 @@ const searchRoomMessages = async (req, res) => {
         }).sort({ createdAt: -1 });
 
         res.status(200).json({ messages });
+
     } catch (error) {
         console.error("Error searching messages:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
 
 export { createRoom, createPrivateRoom, getChatRooms, joinPublicRoom, joinPrivateRoom, inviteUsers, leaveRoom, deleteRoom, getRoomMessages, searchRoomMessages };
