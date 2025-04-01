@@ -84,4 +84,4 @@ const searchMessages = async (req, res) => {
 };
 
 
-export { sendMessage, getMessages, deleteMessage, markAsSeen, searchMessages };
+export { sendMessage, getMessages, deleteMessage, markAsSeen, searchMessages, markMessagesAsRead };

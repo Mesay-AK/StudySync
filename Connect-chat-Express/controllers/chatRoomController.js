@@ -162,6 +162,26 @@ const deleteRoom = async (req, res) => {
 };
 
 
+const sendMessageToRoom = async (req, res) => {
+    try {
+        const { sender, roomId, content } = req.body;
+        const room = await ChatRoom.findById(roomId);
+
+        if (!room) return res.status(404).json({ message: "Room not found" });
+
+        const newMessage = new Message({ sender, chatRoomId: roomId, content });
+        await newMessage.save();
+
+ 
+        io.to(roomId).emit("receiveMessage", newMessage);
+
+        res.status(201).json(newMessage);
+    } catch (error) {
+        console.error("Error sending message to room:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 const getRoomMessages = async (req, res) => {
     try {
 
@@ -198,4 +218,4 @@ const searchRoomMessages = async (req, res) => {
 };
 
 
-export { createRoom, createPrivateRoom, getChatRooms, joinPublicRoom, joinPrivateRoom, inviteUsers, leaveRoom, deleteRoom, getRoomMessages, searchRoomMessages };
+export { createRoom, createPrivateRoom, getChatRooms, joinPublicRoom, joinPrivateRoom, inviteUsers, leaveRoom, deleteRoom, getRoomMessages, searchRoomMessages, sendMessageToRoom };
