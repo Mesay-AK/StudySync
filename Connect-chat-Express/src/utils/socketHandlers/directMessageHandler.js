@@ -10,6 +10,12 @@ const handleDirectMessages = (socket, io) => {
 
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("receiveDirectMessage", newMessage);
+      io.to(receiverSocketId).emit("newDirectMessageNotification", {
+        sender,
+        message: content,
+      });
+
+      io.to(sender).emit("messageSent", newMessage);
     }
   });
 };

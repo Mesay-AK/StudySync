@@ -1,4 +1,4 @@
-import {sendMessage, getMessages, deleteMessage, markAsSeen} from "../controllers/directMessageController.js";
+import {sendMessage, getMessages, deleteMessage, markAsSeen} from "../../src/controllers/directMessageController.js";
 import express from "express";
 
 

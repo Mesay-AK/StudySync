@@ -1,15 +1,18 @@
+
 const usersOnline = new Map();
 
 const handleUserConnection = (socket) => {
   socket.on("userConnected", (userId) => {
     usersOnline.set(socket.id, userId);
+    socket.join(userId);
     console.log(`User ${userId} connected with socket ${socket.id}`);
   });
 
   socket.on("disconnect", () => {
-    const userId = usersOnline.get(socket.id);
-    usersOnline.delete(socket.id);
-    console.log(`User ${userId} disconnected`);
+    usersOnline.forEach((value, key) => {
+      if (value === socket.id) usersOnline.delete(key);
+    });
+    console.log(`User Disconnected: ${socket.id}`);
   });
 };
 

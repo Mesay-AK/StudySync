@@ -10,7 +10,6 @@ const setupSocket = (server) => {
   io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
-    // Register event handlers
     handleUserConnection(socket);
     handleDirectMessages(socket, io);
     handleChatRooms(socket);

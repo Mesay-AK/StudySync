@@ -1,4 +1,4 @@
-import DirectMessage from "../models/DirectMessage.js";
+import DirectMessage from "../../config/models/DirectMessage.js";
 
 
 const sendMessage = async (req, res) => {
@@ -8,6 +8,11 @@ const sendMessage = async (req, res) => {
 
         await newMessage.save();
         await User.findByIdAndUpdate(receiver, { $inc: { unreadMessages: 1 } });
+        
+        req.io.to(receiver).emit("newDirectMessageNotification", {
+            sender,
+            message: content,
+        });
 
         res.status(201).json(newMessage);
     } catch (error) {
@@ -29,7 +34,6 @@ const getMessages = async (req, res) => {
     }
 };
 
-// Delete a Message
 const deleteMessage = async (req, res) => {
     try {
         const { messageId } = req.params;

@@ -1,6 +1,6 @@
 import passport from 'passport';
 import GoogleStrategy from 'passport-google-oauth20';
-import User from '../models/user';
+import User from './models/user';
 import generateToken from '../utils/generateToken';
 
 

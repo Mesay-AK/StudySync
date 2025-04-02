@@ -12,7 +12,11 @@ const createRoom = async (req, res) => {
             members: [creatorId],
             admins: [creatorId],
         });
-
+        req.io.to(roomId).emit("newRoomMessageNotification", {
+            sender,
+            message: content,
+            roomId,
+        });
         await newRoom.save();
         res.status(201).json(newRoom);
     } catch (error) {
