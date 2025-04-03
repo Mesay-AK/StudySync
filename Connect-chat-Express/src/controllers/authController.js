@@ -1,66 +1,63 @@
-import bcrypt from 'bcryptjs';
-import { User} from "../models/user.js";
-import generateToken from "../utils/generateToken.js";
-import e from 'cors';
-// import { validationResult } from 'express-validator';
-
+import bcrypt from "bcryptjs";
+import User from "../models/User.js";
+import {hashedPassword, comparePassword, hashPassword} from "../utils/passwordHelpers/password-helper.js";
+import {generateAccessToken, generateRefreshToken, verifyAccessToken, validateRefreshToken, deleteRefreshToken} from "../utils/tokenHelpers/token-helper.js";
 
 const registerUser = async (req, res) => {
-    const {userName, email, password} = req.body;
+  try {
+    const { username, email, password, displayName } = req.body;
 
-    if (!userName || !email || !password) {
-        return res.status(400).json({message: "Please fill in all fields"});
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already in use" });
     }
-    const userExists = await User.findOne({email});
 
-    if (userExists) {
-        return res.status(400).json({message: "User already exists"});
+    // Hash password
+    const hashedPassword = hashPassword(password);
+    if (!hashedPassword) {
+      return res.status(500).json({ message: "Failed to hash password" });
     }
-    
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const user = await User.create({
-        userName,
-        email,
-        password: hashedPassword
+    const newUser = new User({
+      username,
+      email,
+      password: hashedPassword,
+      displayName: displayName || username, 
     });
 
-    if (user){
-        res.status(201).json({
-            _id: user._id,
-            userName: user.userName,
-            email: user.email,
-            token: generateToken(user._id)
-        });
+    await newUser.save();
+    res.status(201).json({ message: "User registered successfully", userId: newUser._id });
 
-    }else {
-        res.status(400).json({message: "Invalid user data"});
-    }
-}
+  } catch (error) {
+    console.error("Error registering user:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 
 const loginUser = async (req, res) => {
-    const {email, password} = req.body;
+  try {
+    const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({message: "Please fill in all fields"});
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const user = await User.findOne({
-        email
-    });
-
-    if (user && (await user.matchPassword(password))) {
-        res.json({
-            _id: user._id,
-            userName: user.userName,
-            email: user.email,
-            token: generateToken(user._id)
-        });
-    }else {
-        res.status(401).json({message: "Invalid email or password"});
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid email or password" });
     }
+
+    const token = generateAccessToken({ userId: user._id });
+
+
+    res.status(200).json({ token, userId: user._id, displayName: user.displayName });
+  } catch (error) {
+    console.error("Error logging in:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
-export {registerUser, loginUser};
+
+export { registerUser };
