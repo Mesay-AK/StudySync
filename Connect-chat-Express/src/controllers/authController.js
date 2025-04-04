@@ -12,7 +12,6 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Email already in use" });
     }
 
-    // Hash password
     const hashedPassword = hashPassword(password);
     if (!hashedPassword) {
       return res.status(500).json({ message: "Failed to hash password" });
@@ -60,4 +59,71 @@ const loginUser = async (req, res) => {
 };
 
 
-export { registerUser };
+const refreshToken = async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(401).json({ message: "Refresh token not provided" });
+  }
+
+  try {
+    const userId = validateRefreshToken(token);
+    if (!userId) {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+
+    const newAccessToken = generateAccessToken({ userId });
+    res.status(200).json({ accessToken: newAccessToken });
+  } catch (error) {
+    console.error("Error refreshing token:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const logoutUser = async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(401).json({ message: "Refresh token not provided" });
+  }
+
+  try {
+    const userId = validateRefreshToken(token);
+    if (!userId) {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+
+    await deleteRefreshToken(token);
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Error logging out:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const getUserProfile = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.status(200).json(user);
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const deleteProfile = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const user = await User.findByIdAndDelete(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.status(200).json({ message: "User profile deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+} ;
+
