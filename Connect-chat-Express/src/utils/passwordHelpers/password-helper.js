@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 
 
-const hashPassword = async(password) {
+const hashPassword = async(password) => {
     try {
         const saltRounds = 10; 
         const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -14,7 +14,7 @@ const hashPassword = async(password) {
         throw new Error("Failed to hash password.");
     }
 }
-const comparePassword = async(password, hashedPassword) {
+const comparePassword = async(password, hashedPassword) => {
     try {
 
         return await bcrypt.compare(password, hashedPassword);
