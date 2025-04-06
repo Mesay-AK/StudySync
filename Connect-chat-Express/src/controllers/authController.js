@@ -11,7 +11,7 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Email already in use" });
     }
 
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = await hashPassword(password);
     if (!hashedPassword) {
       return res.status(500).json({ message: "Failed to hash password" });
     }
@@ -74,12 +74,12 @@ const refreshToken = async (req, res) => {
   }
 
   try {
-    const userId = validateRefreshToken(token);
-    if (!userId) {
+    const validated = validateRefreshToken(token);
+    if (!validated) {
       return res.status(403).json({ message: "Invalid refresh token" });
     }
 
-    const newAccessToken = generateAccessToken({ userId });
+    const newAccessToken = generateAccessToken({ validated });
     res.status(200).json({ accessToken: newAccessToken });
   } catch (error) {
     console.error("Error refreshing token:", error);
@@ -99,7 +99,7 @@ const logOutUser = async (req, res) => {
       return res.status(403).json({ message: "Invalid refresh token" });
     }
 
-    await deleteRefreshToken(token);
+    await deleteRefreshToken(decoded.sessionId);
 
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {

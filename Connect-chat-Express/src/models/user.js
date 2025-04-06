@@ -8,7 +8,7 @@ const userSchema = mongoose.Schema(
         profilePicture: {type: String, default: ""},
         bio: {type: String, default: ""},
         status: {type: Boolean , default: false},
-        accountType: {type: String, enum: ["user", "admin"], default: "user"},
+        role: {type: String, enum: ["user", "admin"], default: "user"},
         lastSeen: { type: Date, default: null } ,
         resetToken: {type: String, default: ""},
         friends: [
