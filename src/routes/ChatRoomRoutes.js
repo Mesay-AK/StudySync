@@ -1,13 +1,16 @@
 import express from "express";
-import { createRoom, getChatRooms, joinRoom, leaveRoom } from "../controllers/chatRoomController.js";
+import { createRoom, getChatRooms, joinPublicRoom, leaveRoom, deleteRoom, getRoomMessages } from "../controllers/chatRoomController.js";
 
 
-const router = express.Router();
+const chatRoomRouter = express.Router();
 
 
-router.post("/create", createRoom(req, res));
-router.get("/", getChatRooms(req, res));
-router.post("/join", joinPublicRoom(req, res));
-router.post("/leave", leaveRoom(req, res));
-router.delete("/:roomId", deleteRoom(req, res));
-router.get("/:roomId/messages", getRoomMessages(req, res));  
+chatRoomRouter.post("/create", createRoom);
+chatRoomRouter.get("/all", getChatRooms);  
+chatRoomRouter.post("/join", joinPublicRoom);
+chatRoomRouter.post("/leave", leaveRoom);
+chatRoomRouter.delete("/delete/:roomId", deleteRoom);
+chatRoomRouter.get("/messages/:roomId", getRoomMessages);
+
+
+export default chatRoomRouter;

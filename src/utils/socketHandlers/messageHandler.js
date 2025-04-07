@@ -1,4 +1,4 @@
-import Message from "../models/Message.js";
+import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
 
 const handleMessages = (socket, io) => {

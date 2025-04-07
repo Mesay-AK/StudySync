@@ -1,6 +1,5 @@
-
 import jwt from 'jsonwebtoken';
-import redisClient from '../cache/redisClient.js';
+import redisClient from '../../config/redisClient.js';
 import { v4 as uuidv4 } from 'uuid';
 
 

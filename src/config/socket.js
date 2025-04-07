@@ -1,8 +1,9 @@
 import { Server } from "socket.io";
-import { handleUserConnection } from "../socketHandlers/userHandler.js";
-import { handleDirectMessages } from "../socketHandlers/directMessageHandler.js";
-import { handleChatRooms } from "../socketHandlers/chatRoomHandler.js";
-import { handleMessages } from "../socketHandlers/messageHandler.js";
+import { handleUserConnection } from "../utils/socketHandlers/userHandlers.js";
+import { handleDirectMessages } from "../utils/socketHandlers/directMessageHandler.js";
+import { handleMessages } from "../utils/socketHandlers/messageHandler.js";
+import { handleChatRooms } from "../utils/socketHandlers/chatRoomHandler.js";
+
 
 const setupSocket = (server) => {
   const io = new Server(server, { cors: { origin: "*" } });

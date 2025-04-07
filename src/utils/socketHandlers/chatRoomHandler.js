@@ -1,4 +1,4 @@
-import ChatRoom from "../models/ChatRoom.js";
+import ChatRoom from "../../models/ChatRoom.js";
 
 const handleChatRooms = (socket) => {
   socket.on("joinPublicRoom", async ({ userId, roomId }) => {

@@ -1,5 +1,5 @@
-import DirectMessage from "../models/DirectMessage.js";
-import { usersOnline } from "./userHandler.js";
+import DirectMessage from "../../models/DirectMessage.js";
+import { usersOnline } from "./userHandlers.js";
 
 const handleDirectMessages = (socket, io) => {
   socket.on("sendDirectMessage", async ({ sender, receiver, content }) => {

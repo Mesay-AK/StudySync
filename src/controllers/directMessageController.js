@@ -1,5 +1,4 @@
-import DirectMessage from "../../config/models/DirectMessage.js";
-
+import DirectMessage from "../models/DirectMessage.js";
 
 const sendMessage = async (req, res) => {
     try {

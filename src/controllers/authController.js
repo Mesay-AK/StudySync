@@ -1,6 +1,6 @@
 import User from "../models/User.js";
 import {comparePassword, hashPassword} from "../utils/passwordHelpers/password-helper.js";
-import {generateAccessToken, generateRefreshToken, verifyAccessToken, validateRefreshToken, deleteRefreshToken} from "../utils/tokenHelpers/token-helper.js";
+import {generateAccessToken, generateRefreshToken, validateRefreshToken, deleteRefreshToken} from "../utils/Tokens/tokenHelper.js";
 
 const registerUser = async (req, res) => {
   try {
