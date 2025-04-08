@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken';
 import User from '../models/userModel.js';
 import { verifyAccessToken } from '../utils/Tokens/tokenHelper.js';
 
@@ -31,7 +30,7 @@ const authenticateToken = (req, res, next) => {
 
 
 const validateUser = async (req, res, next) => {
-  const userId = req.params.userId || req.body.userId || req.user.userId; // Get userId from request parameters, body, or authenticated user
+  const userId = req.params.userId || req.body.userId || req.user.userId; 
 
   try {
     const user = await User.findById(userId);
@@ -40,7 +39,7 @@ const validateUser = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    req.user = user; // Attach the user object to the request for further use
+    req.user = user; 
     next();
   } catch (error) {
     console.error("Error validating user:", error.message);
