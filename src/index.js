@@ -5,6 +5,7 @@ import http from 'http'; // <-- import this!
 import connectDB from './config/db.js';
 
 import authRoutes from './routes/authRoutes.js';
+import usreRoutes from './routes/usreRoutes.js';
 import chatRoomRoutes from './routes/chatRoomRoutes.js';
 import directMessage from './routes/directMessageRoutes.js';
 
@@ -22,6 +23,7 @@ app.use(express.json());
 app.use(cors());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/user', usreRoutes);
 app.use('/api/messages', directMessage);
 app.use('/api/chatrooms', chatRoomRoutes);
 

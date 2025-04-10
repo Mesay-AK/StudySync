@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import {comparePassword, hashPassword} from "../utils/passwordHelpers/password-helper.js";
 import {generateAccessToken, generateRefreshToken, validateRefreshToken, deleteRefreshToken} from "../utils/Tokens/tokenHelper.js";
 
+
 const registerUser = async (req, res) => {
   try {
     const { username, email, password, displayName } = req.body;
@@ -53,7 +54,8 @@ const logInUser = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      // secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "strict",
       maxAge: 30 * 24 * 60 * 60 * 1000, 
     });

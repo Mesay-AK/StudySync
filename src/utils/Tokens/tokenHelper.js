@@ -9,7 +9,7 @@ const generateAccessToken = (payload) => {
     payload.sessionId = uuidv4();
 
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m', algorithm: 'HS256' });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h', algorithm: 'HS256' });
 
     return token
 }
@@ -17,6 +17,7 @@ const generateAccessToken = (payload) => {
 const generateRefreshToken = async(payload) => {
     payload.iat = Math.floor(Date.now() / 1000);
     payload.sessionId = uuidv4();
+    
     const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d', algorithm: 'HS256' });
 
 
