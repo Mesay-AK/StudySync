@@ -1,29 +1,34 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import http from 'http'; // <-- import this!
+import http from 'http';
 import connectDB from './config/db.js';
+import passport from 'passport';
+import morgan from 'morgan';
 
 import authRoutes from './routes/authRoutes.js';
-import usreRoutes from './routes/usreRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import chatRoomRoutes from './routes/chatRoomRoutes.js';
 import directMessage from './routes/directMessageRoutes.js';
 
-import setupSocket from './config/socket.js'; // or wherever your socket file is
+import setupSocket from './config/socket.js';
 
 dotenv.config();
 connectDB();
 
 const app = express();
-const server = http.createServer(app); // <-- create HTTP server from app
+const server = http.createServer(app);
 
-setupSocket(server); // <-- attach socket to the server
+setupSocket(server);
 
 app.use(express.json());
 app.use(cors());
+app.use(morgan('dev'));  
+app.use(express.urlencoded({ extended: true })); 
+app.use(passport.initialize());  
 
 app.use('/api/auth', authRoutes);
-app.use('/api/user', usreRoutes);
+app.use('/api/user', userRoutes);
 app.use('/api/messages', directMessage);
 app.use('/api/chatrooms', chatRoomRoutes);
 

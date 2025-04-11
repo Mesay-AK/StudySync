@@ -1,49 +1,49 @@
 import passport from 'passport';
-import GoogleStrategy from 'passport-google-oauth20';
-import User from './models/user';
-import generateToken from '../utils/generateToken';
-
+import { OAuth2Strategy as GoogleStrategy } from 'passport-google-oauth';
+import User from '../models/User.js';
 
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: '/api/auth/google/callback',
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
     },
-    async (accessToken, refreshToken, profile, done) => {
-      const email = profile.emails[0].value;
-      const username = profile.displayName;
-
+    async (token, tokenSecret, profile, done) => {
       try {
+        const { email, name, picture } = profile._json;
+
+        // Check if user already exists
         let user = await User.findOne({ email });
 
         if (!user) {
-          user = await User.create({
-            username,
+          // If not, create a new user
+          user = new User({
+            username: name,
             email,
-            password: null, // They are Google-auth users, no local password
-            profilePic: profile.photos[0]?.value,
-            status: 'offline',
+            displayName: name,
+            profilePicture: picture,
+            status: true,  // or any default status you want
           });
+          await user.save();
         }
 
-        // Attach JWT to user object so we can use it in redirect
-        const token = generateToken(user._id);
-        user.token = token;
-
-        done(null, user);
+        // Return user
+        return done(null, user);
       } catch (error) {
-        done(error, null);
+        return done(error, false);
       }
     }
   )
 );
 
 passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  const user = await User.findById(id);
   done(null, user);
 });
 
-passport.deserializeUser((obj, done) => {
-  done(null, obj);
-});
+export default passport;
