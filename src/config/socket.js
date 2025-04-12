@@ -4,15 +4,16 @@ import { handleDirectMessages } from "../utils/socketHandlers/directMessageHandl
 import { handleMessages } from "../utils/socketHandlers/messageHandler.js";
 import { handleChatRooms } from "../utils/socketHandlers/chatRoomHandler.js";
 
-
 const setupSocket = (server) => {
   const io = new Server(server, { cors: { origin: "*" } });
+
+  const usersOnline = new Map();
 
   io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
-    handleUserConnection(socket);
-    handleDirectMessages(socket, io);
+    handleUserConnection(socket, usersOnline);
+    handleDirectMessages(socket, io, usersOnline);
     handleChatRooms(socket);
     handleMessages(socket, io);
   });

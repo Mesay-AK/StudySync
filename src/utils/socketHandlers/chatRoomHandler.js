@@ -18,6 +18,11 @@ const handleChatRooms = (socket) => {
     const room = await ChatRoom.findById(roomId);
     if (!room || room.type !== "private" || !room.invitedUsers.includes(userId)) return;
 
+    if (!room.members.includes(userId)) {
+      room.members.push(userId);
+      await room.save();
+    }
+
     socket.join(roomId);
     console.log(`User ${userId} joined private room ${roomId}`);
   });

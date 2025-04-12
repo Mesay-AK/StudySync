@@ -6,15 +6,13 @@ const ChatRoomSchema = new Schema(
     {
         name: {type:String, required: true},
         type: {type: String, enum: ["public", "private"], default: "public"},
-        members: [
-            {type: Schema.Types.ObjectId, ref: "User"}
-        ],
+        members: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
+        invitedUsers: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
         admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
         messages: [
             {type: Schema.Types.ObjectId, ref: "Message"}
         ],
         createdBy: {type: Schema.Types.ObjectId, ref: "User"},
-        invitedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
         isDeleted: {type: Boolean, default: false},
 
     },
