@@ -5,7 +5,9 @@ import {
   registerUser,
   logInUser,
   refreshToken,
-  logOutUser
+  logOutUser, 
+  requestPasswordReset, 
+  resetPassword
 } from '../controllers/authController.js';
 
 const authRouter = express.Router();
@@ -27,12 +29,11 @@ authRouter.get(
 
 
 authRouter.post('/register', registerUser);
-
 authRouter.post('/login', logInUser);
-
-
 authRouter.post('/refresh', refreshToken);
-
 authRouter.post('/logout', logOutUser);
+authRouter.post("/forgot-password", requestPasswordReset);
+authRouter.post("/reset-password", resetPassword);
+
 
 export default authRouter;

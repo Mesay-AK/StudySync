@@ -62,3 +62,7 @@ export const deleteRefreshToken = async (sessionId) => {
     throw new Error('Failed to delete refresh token from Redis');
   }
 };
+
+export const generatePasswordResetToken = () => {
+  return crypto.randomBytes(32).toString('hex'); // Generates a random token
+}

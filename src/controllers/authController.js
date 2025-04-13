@@ -8,7 +8,8 @@ import {
   generateAccessToken,
   generateRefreshToken,
   validateRefreshToken,
-  deleteRefreshToken
+  deleteRefreshToken,
+  generatePasswordResetToken
 } from '../utils/Tokens/tokenHelper.js';
 
 export const registerUser = async (req, res) => {
@@ -89,5 +90,62 @@ export const logOutUser = async (req, res) => {
   } catch (error) {
     console.error('Error logging out:', error);
     return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+
+export const requestPasswordReset = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const resetToken = generatePasswordResetToken();
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; 
+    await user.save();
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    await sendEmail({
+      to: email,
+      subject: "Password Reset Request",
+      html: `<p>Click <a href="${resetLink}">here</a> to reset your password.</p>`
+    });
+
+    res.status(200).json({ message: "Password reset email sent" });
+  } catch (error) {
+    console.error("Error during password reset request:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+export const resetPassword = async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  try {
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.status(200).json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error("Error during password reset:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
