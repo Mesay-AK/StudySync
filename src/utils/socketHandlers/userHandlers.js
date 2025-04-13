@@ -13,7 +13,7 @@ const handleUserConnection = (socket, io) => {
       await User.findByIdAndUpdate(userId, { onlineStatus: true, lastSeen: new Date() });
       io.emit("updateUserStatus", { userId, onlineStatus: true });
     } catch (error) {
-      console.error("Error updating user status:", error);
+      console.error("Error updating user online status:", error);
     }
   });
 
@@ -28,7 +28,7 @@ const handleUserConnection = (socket, io) => {
         await User.findByIdAndUpdate(userId, { onlineStatus: false, lastSeen: new Date() });
         io.emit("updateUserStatus", { userId, onlineStatus: false });
       } catch (error) {
-        console.error("Error updating user status:", error);
+        console.error("Error updating user offline status:", error);
       }
     }
   });

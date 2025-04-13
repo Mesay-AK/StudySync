@@ -1,5 +1,6 @@
 import DirectMessage from "../models/DirectMessage.js";
-import User from "../models/User.js";
+// import User from "../models/User.js";   
+
 
 export const getDirectMessages = async (req, res) => {
   const { sender, receiver } = req.params;
