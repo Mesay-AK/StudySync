@@ -10,6 +10,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import chatRoomRoutes from './routes/chatRoomRoutes.js';
 import directMessage from './routes/directMessageRoutes.js';
+import notifyRouter from './routes/notificationRoutes.js';
 
 import setupSocket from './config/socket.js';
 
@@ -31,6 +32,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/messages', directMessage);
 app.use('/api/chatrooms', chatRoomRoutes);
+app.use('/api/notifications', notifyRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

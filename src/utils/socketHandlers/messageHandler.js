@@ -11,17 +11,20 @@ const handleMessages = (socket, io) => {
     io.to(roomId).emit("receiveMessage", newMessage);
 
     const room = await ChatRoom.findById(roomId);
-    if (room) {
-      room.members.forEach((member) => {
-        if (member.toString() !== sender) {
-          io.to(member.toString()).emit("newRoomMessageNotification", {
-            sender,
-            message: content,
-            roomId,
-          });
-        }
-      });
-    }
+    if (!room) return;
+    await Promise.all(
+      room.members.map((member) =>
+        createAndSendNotification({
+          io,
+          type: "room_message",
+          recipientId: member.toString(),
+          senderId: sender,
+          content,
+          metadata: { roomId },
+        })
+      )
+    );
+
   });
 };
 
