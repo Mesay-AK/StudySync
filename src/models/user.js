@@ -10,10 +10,15 @@ const userSchema = Schema(
     password: { type: String, required: true },
     profilePicture: { type: String, default: "" },
     bio: { type: String, default: "" },
-    onlineStatus: { type: Boolean, default: false },
+    onlineStatus: { 
+      type: String, 
+      enum: ["online", "offline"], 
+      default: "offline" 
+    },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     lastSeen: { type: Date, default: null },
     resetToken: { type: String, default: "" },
+    resetPasswordExpires: Date,
     friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
     blockedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
     unreadMessages: { type: Number, default: 0 },
