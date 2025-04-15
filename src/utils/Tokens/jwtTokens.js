@@ -36,6 +36,7 @@ export const verifyAccessToken = async (token) => {
     return payload;
   } catch (error) {
     throw new Error(`Invalid or expired token: ${error.message}`);
+
   }
 };
 

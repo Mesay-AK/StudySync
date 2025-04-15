@@ -1,4 +1,3 @@
-
 import User from '../models/User.js';
 import {
   comparePassword,
@@ -10,7 +9,7 @@ import {
   validateRefreshToken,
   deleteRefreshToken,
   generatePasswordResetToken
-} from '../utils/Tokens/tokenHelper.js';
+} from '../utils/Tokens/jwtTokens.js';
 
 export const registerUser = async (req, res) => {
   try {

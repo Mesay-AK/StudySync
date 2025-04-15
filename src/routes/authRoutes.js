@@ -1,6 +1,8 @@
 // routes/authRoutes.js
 import express from 'express';
 import passport from 'passport';
+import { handleOAuthSuccess } from '../utils/Tokens/outhTokens.js';
+
 import {
   registerUser,
   logInUser,
@@ -20,12 +22,17 @@ authRouter.get(
 
 authRouter.get(
   '/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login' }),
-  (req, res) => {
-    
-    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${req.user.token}`);
+  passport.authenticate('google', { failureRedirect: '/login', session: false }),
+  async (req, res) => {
+    try {
+      await handleOAuthSuccess(res, req.user, true); // `true` = use cookies
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth`);
+    }
   }
 );
+
 
 
 authRouter.post('/register', registerUser);

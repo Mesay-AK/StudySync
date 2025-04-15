@@ -3,6 +3,7 @@ import { handleUserConnection } from "../utils/socketHandlers/userHandlers.js";
 import { handleDirectMessages } from "../utils/socketHandlers/directMessageHandler.js";
 import { handleMessages } from "../utils/socketHandlers/messageHandler.js";
 import { handleChatRooms } from "../utils/socketHandlers/chatRoomHandler.js";
+import { handleTypingIndicators } from "../utils/socketHandlers/typingHandlers.js";
 
 const setupSocket = (server) => {
   const io = new Server(server, { cors: { origin: "*" } });
@@ -15,7 +16,9 @@ const setupSocket = (server) => {
     handleUserConnection(socket, usersOnline);
     handleDirectMessages(socket, io, usersOnline);
     handleChatRooms(socket);
-    handleMessages(socket, io);
+    handleMessages(socket, io);      
+    handleTypingIndicators(socket, io);
+
   });
 
   return io;
