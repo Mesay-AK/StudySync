@@ -9,6 +9,16 @@ const MessageSchema = new Schema(
         chatRoomId: {type: Schema.Types.ObjectId, ref:"ChatRoom", default: null},
         content: {type: String, required: true},
         messageType: {type: String, enum: ["text", "image", "video", "file"], default: "text"},
+        status: {
+        type: String, enum: ['sent', 'delivered', 'read'],
+        default: 'sent',
+        },
+        isDeleted: {type: Boolean, default: false},
+        createdAt: {type: Date, default: Date.now},
+        updatedAt: {type: Date, default: Date.now}
+    },
+    {
+        timestamps: true,
         
     }
 )
