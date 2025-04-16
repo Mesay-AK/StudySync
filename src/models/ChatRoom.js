@@ -9,9 +9,7 @@ const ChatRoomSchema = new Schema(
         members: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
         invitedUsers: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
         admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
-        messages: [
-            {type: Schema.Types.ObjectId, ref: "Message"}
-        ],
+        messages: [{type: Schema.Types.ObjectId, ref: "Message"}],
         createdBy: {type: Schema.Types.ObjectId, ref: "User"},
         isDeleted: {type: Boolean, default: false},
 

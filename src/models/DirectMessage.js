@@ -8,8 +8,15 @@ const DirectMessageSchema = new Schema(
     receiver: { type: Schema.Types.ObjectId, ref: "User", required: true },
     content: { type: String, required: true },
     seen: { type: Boolean, default: false }, 
+    media: {
+    url: String, type: { type: String, enum: ["image","video", "file"], default: null }},
+    status: {type: String, enum: ["sent", "delivered", "read"],default: "sent",},
+    isDeleted: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  },
+
 );
 
 const DirectMessage = model("DirectMessage", DirectMessageSchema);
