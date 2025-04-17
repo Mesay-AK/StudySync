@@ -1,21 +1,6 @@
-import jwt from "jsonwebtoken";
-import User from "../models/User.js";
-
-export const isAdmin = async (req, res, next) => {
-  const token = req.cookies.token || req.headers["authorization"];
-  if (!token) {
-    return res.status(403).json({ error: "No token provided" });
+export const isAdmin = (req, res, next) => {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ message: "Admin access only" });
   }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
-    if (!user || !user.isAdmin) {
-      return res.status(403).json({ error: "Not authorized as admin" });
-    }
-    req.user = user;
-    next();
-  } catch (err) {
-    return res.status(500).json({ error: "Failed to authenticate token" });
-  }
+  next();
 };

@@ -2,6 +2,7 @@
 import express from 'express';
 import passport from 'passport';
 import { handleOAuthSuccess } from '../utils/Tokens/outhTokens.js';
+import { validateUser } from '../middleware/authMiddleware.js';
 
 import {
   registerUser,
@@ -36,7 +37,7 @@ authRouter.get(
 
 
 authRouter.post('/register', registerUser);
-authRouter.post('/login', logInUser);
+authRouter.post('/login',validateUser, logInUser);
 authRouter.post('/refresh', refreshToken);
 authRouter.post('/logout', logOutUser);
 authRouter.post("/forgot-password", requestPasswordReset);

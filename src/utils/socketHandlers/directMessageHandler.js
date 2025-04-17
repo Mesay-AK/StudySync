@@ -8,9 +8,18 @@ const handleDirectMessages = (socket, io) => {
   socket.on("sendDirectMessage", async ({ sender, receiver, content }) => {
     if (!sender || !receiver || !content) return;
 
+    const senderUser = await User.findById(sender);
+    if (senderUser?.isBanned) {
+        socket.emit("banned", {
+        message: "You are currently banned. Please contact support.",
+  
+});
+      return; 
+    }
+
     const receiverUser = await User.findById(receiver);
     if (!receiverUser || receiverUser.blockedUsers.includes(sender)) {
-      return; // Don't send message
+      return; 
     }
 
     const newMessage = new DirectMessage({

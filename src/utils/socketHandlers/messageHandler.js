@@ -13,6 +13,14 @@ const handleMessages = (socket, io) => {
     const room = await ChatRoom.findById(roomId);
     if (!room) return;
 
+    const senderUser = await User.findById(sender);
+    if (senderUser?.isBanned) {
+        socket.emit("banned", {
+        message: "You are currently banned. Please contact support.",
+      });
+      return; 
+    }
+
     const newMessage = new Message({
       sender,
       chatRoomId: roomId,

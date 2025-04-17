@@ -1,58 +1,51 @@
-
 import User from '../models/User.js';
-import { verifyAccessToken } from '../utils/Tokens/tokenHelper.js';
 
-export const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
+export const authenticate = async (req, res, next) => {
+  const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Access token missing or invalid' });
-  }
-
-  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: "Access token missing" });
 
   try {
-    const decoded = await verifyAccessToken(token);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error('Token verification error:', error.message);
-    return res.status(403).json({ message: 'Invalid or expired token' });
-  }
-};
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
 
-export const validateUser = async (req, res, next) => {
-  const userId = req.params.userId || req.body.userId || req.user?.userId;
-
-  try {
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    if (!user) return res.status(401).json({ message: "User not found" });
 
     req.user = user;
     next();
-  } catch (error) {
-    console.error('Error validating user:', error.message);
-    return res.status(500).json({ message: 'Internal server error' });
+  } catch (err) {
+    console.error("Authentication error:", err.message);
+    return res.status(403).json({ message: "Invalid or expired token" });
   }
 };
+export const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Forbidden: insufficient role" });
+    }
+    next();
+  };
+};
 
-export const authorizeRoles = (...allowedRoles) => (req, res, next) => {
-  if (!req.user || !allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ message: 'Access denied' });
+export const checkOwnershipOrAdmin = (paramName = "userId") => {
+  return (req, res, next) => {
+    const targetUserId = req.params[paramName] || req.body[paramName];
+    if (req.user._id.toString() === targetUserId || req.user.isAdmin) {
+      return next();
+    }
+    return res.status(403).json({ message: "Forbidden: Not owner or admin" });
+  };
+};
+
+
+export const validateUser = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "User not authenticated" });
   }
+
+  if (req.user.isBanned) {
+    return res.status(403).json({ message: "Access denied. You are banned." });
+  }
+
   next();
-};
-
-export const checkOwnershipOrAdmin = (req, res, next) => {
-  const { userId } = req.params;
-  const loggedInUser = req.user;
-
-  if (loggedInUser.userId === userId || loggedInUser.role === 'admin') {
-    return next();
-  }
-
-  return res.status(403).json({ message: 'Forbidden. Not your profile.' });
 };

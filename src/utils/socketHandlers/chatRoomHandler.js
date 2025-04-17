@@ -5,6 +5,14 @@ const handleChatRooms = (socket) => {
     const room = await ChatRoom.findById(roomId);
     if (!room || room.isDeleted) return;
 
+    const senderUser = await User.findById(userId);
+    if (senderUser?.isBanned) {
+        socket.emit("banned", {
+        message: "You are currently banned. Please contact support.",
+      });
+      return; 
+    }
+
     const alreadyMember = room.members.includes(userId);
     const isAllowed =
       room.type === "public" || (room.type === "private" && room.invitedUsers.includes(userId));

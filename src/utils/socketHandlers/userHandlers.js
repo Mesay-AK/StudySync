@@ -4,14 +4,20 @@ const usersOnline = new Map();
 
 const handleUserConnection = (socket, io) => {
 
-  socket.on("userConnected", async (userId) => {
+    socket.on("userConnected", async (userId) => {
 
+    const user = await User.findById(userId);
+    if (!user || user.isBanned) {
+      socket.emit("banned", { message: "You are banned from using the chat." });
+      socket.disconnect();
+      return;
+    }
     if ([...usersOnline.values()].includes(userId)) {
       console.log(`User ${userId} already connected on another tab/device`);
     }
 
     usersOnline.set(socket.id, userId);
-    socket.join(userId); // Join a room named after the user for private messaging
+    socket.join(userId); 
 
     console.log(`User ${userId} connected with socket ${socket.id}`);
 
@@ -57,6 +63,8 @@ const handleUserConnection = (socket, io) => {
       }
     }
   });
+
+
 };
 
 export { handleUserConnection, usersOnline };
