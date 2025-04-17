@@ -3,15 +3,28 @@ import User from "../../models/User.js";
 const usersOnline = new Map();
 
 const handleUserConnection = (socket, io) => {
+
   socket.on("userConnected", async (userId) => {
+
+    if ([...usersOnline.values()].includes(userId)) {
+      console.log(`User ${userId} already connected on another tab/device`);
+    }
+
     usersOnline.set(socket.id, userId);
-    socket.join(userId);
+    socket.join(userId); // Join a room named after the user for private messaging
 
     console.log(`User ${userId} connected with socket ${socket.id}`);
 
     try {
-      await User.findByIdAndUpdate(userId, { onlineStatus: true, lastSeen: new Date() });
-      io.emit("updateUserStatus", { userId, onlineStatus: true });
+      await User.findByIdAndUpdate(userId, {
+        onlineStatus: true,
+        lastSeen: new Date(),
+      });
+
+      io.emit("updateUserStatus", {
+        userId,
+        onlineStatus: true,
+      });
     } catch (error) {
       console.error("Error updating user online status:", error);
     }
@@ -23,10 +36,22 @@ const handleUserConnection = (socket, io) => {
 
     console.log(`User Disconnected: ${socket.id}`);
 
-    if (userId) {
+    const stillConnected = [...usersOnline.values()].includes(userId);
+
+    if (userId && !stillConnected) {
+      const lastSeen = new Date();
+
       try {
-        await User.findByIdAndUpdate(userId, { onlineStatus: false, lastSeen: new Date() });
-        io.emit("updateUserStatus", { userId, onlineStatus: false });
+        await User.findByIdAndUpdate(userId, {
+          onlineStatus: false,
+          lastSeen,
+        });
+
+        io.emit("updateUserStatus", {
+          userId,
+          onlineStatus: false,
+          lastSeen,
+        });
       } catch (error) {
         console.error("Error updating user offline status:", error);
       }

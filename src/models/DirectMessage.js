@@ -9,6 +9,7 @@ const DirectMessageSchema = new Schema(
     content: { type: String, required: true },
     emojis: [String],
     seen: { type: Boolean, default: false }, 
+    readAt: { type: Date, default: null },
     media: {
     url: String, type: { type: String, enum: ["image","video", "file"], default: null }},
     status: {type: String, enum: ["sent", "delivered", "read"],default: "sent",},

@@ -1,47 +1,38 @@
 import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
 import { createAndSendNotification } from "../../utils/notificationUtils.js";
-import emojiRegex from 'emoji-regex';
-
+import emojiRegex from "emoji-regex";
+import User from "../../models/User.js"; // Make sure this is imported
+import { usersOnline } from "./userHandlers.js";
 
 const handleMessages = (socket, io) => {
-  // === Send Message to Chat Room ===
+  // === Send Room Message ===
   socket.on("sendPrivateMessage", async ({ sender, roomId, content }) => {
     if (!sender || !roomId || !content) return;
 
-    const receiverUser = await User.findById(receiver);
-    if (receiverUser.blockedUsers.includes(sender)) {
-      return; // Don't send message
-    }
-
+    const room = await ChatRoom.findById(roomId);
+    if (!room) return;
 
     const newMessage = new Message({
       sender,
       chatRoomId: roomId,
       content,
-      status: "sent", // Initial status
+      status: "delivered",
     });
 
-    const room = await ChatRoom.findById(roomId);
-    if (!room) return;
-
-    // Set status to delivered since everyone in the room will receive it live
-    newMessage.status = "delivered";
+    // Extract emojis
     const regex = emojiRegex();
     let emojis = [];
     let match;
-
     while ((match = regex.exec(content))) {
       emojis.push(match[0]);
     }
-
     newMessage.emojis = emojis;
 
     await newMessage.save();
 
     io.to(roomId).emit("receiveMessage", newMessage);
 
-    // Send a notification to each room member
     await Promise.all(
       room.members.map((member) =>
         createAndSendNotification({
@@ -61,28 +52,24 @@ const handleMessages = (socket, io) => {
     try {
       const unreadMessages = await Message.find({
         chatRoomId: roomId,
-        status: { $ne: "read" },
         sender: { $ne: userId },
+        "readBy.user": { $ne: userId }, // not already marked by this user
       });
 
-      const updatedMessages = await Promise.all(
-        unreadMessages.map(async (msg) => {
-          msg.status = "read";
-          await msg.save();
+      for (const msg of unreadMessages) {
+        msg.readBy.push({ user: userId, readAt: new Date() });
+        msg.status = "read"; // Optional: global fallback
+        await msg.save();
 
-          // Notify original sender
-          const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === msg.sender)?.[0];
-          if (senderSocketId) {
-            io.to(senderSocketId).emit("roomMessageRead", {
-              messageId: msg._id.toString(),
-              roomId,
-              readBy: userId,
-            });
-          }
-
-          return msg;
-        })
-      );
+        const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === msg.sender)?.[0];
+        if (senderSocketId) {
+          io.to(senderSocketId).emit("roomMessageRead", {
+            messageId: msg._id.toString(),
+            roomId,
+            readBy: userId,
+          });
+        }
+      }
     } catch (err) {
       console.error("Error marking room messages as read:", err.message);
     }
