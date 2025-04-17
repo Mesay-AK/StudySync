@@ -5,6 +5,7 @@ import http from 'http';
 import connectDB from './config/db.js';
 import passport from 'passport';
 import morgan from 'morgan';
+import path from 'path';
 
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -27,6 +28,7 @@ app.use(cors());
 app.use(morgan('dev'));  
 app.use(express.urlencoded({ extended: true })); 
 app.use(passport.initialize());  
+app.use('/uploads', express.static(path.join(path.resolve(), 'uploads'))); 
 
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);

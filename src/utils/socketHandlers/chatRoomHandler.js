@@ -1,30 +1,37 @@
 import ChatRoom from "../../models/ChatRoom.js";
 
 const handleChatRooms = (socket) => {
-  socket.on("joinPublicRoom", async ({ userId, roomId }) => {
+  socket.on("joinRoom", async ({ userId, roomId }) => {
     const room = await ChatRoom.findById(roomId);
-    if (!room || room.type !== "public") return;
+    if (!room || room.isDeleted) return;
 
-    if (!room.members.includes(userId)) {
+    const alreadyMember = room.members.includes(userId);
+    const isAllowed =
+      room.type === "public" || (room.type === "private" && room.invitedUsers.includes(userId));
+
+    if (isAllowed && !alreadyMember) {
       room.members.push(userId);
       await room.save();
     }
 
-    socket.join(roomId);
-    console.log(`User ${userId} joined public room ${roomId}`);
+    if (isAllowed) {
+      socket.join(roomId);
+
+      socket.to(roomId).emit("userJoined", { userId, roomId });
+      const messages = await Message.find({ chatRoomId: roomId }).sort({ createdAt: -1 }).limit(20);
+      socket.emit('previousMessages', messages);
+    }
   });
 
-  socket.on("joinPrivateRoom", async ({ userId, roomId }) => {
+  socket.on("leaveRoom", async ({ userId, roomId }) => {
     const room = await ChatRoom.findById(roomId);
-    if (!room || room.type !== "private" || !room.invitedUsers.includes(userId)) return;
+    if (!room) return;
 
-    if (!room.members.includes(userId)) {
-      room.members.push(userId);
-      await room.save();
-    }
+    room.members = room.members.filter((id) => id.toString() !== userId);
+    await room.save();
 
-    socket.join(roomId);
-    console.log(`User ${userId} joined private room ${roomId}`);
+    socket.leave(roomId);
+    socket.to(roomId).emit("userLeft", { userId, roomId });
   });
 };
 

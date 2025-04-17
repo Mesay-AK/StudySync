@@ -79,3 +79,40 @@ export const sendMessageToRoom = async (req, res) => {
     res.status(500).json({ error: "Message failed" });
   }
 };
+
+
+export const getRoomMessages = async (req, res) => {
+  const { roomId } = req.params;
+  const { page = 1, limit = 20 } = req.query;  
+
+  try {
+    const messages = await Message.find({ chatRoomId: roomId })
+      .sort({ createdAt: -1 })  
+      .skip((page - 1) * limit)  
+      .limit(limit);
+
+    res.status(200).json(messages);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching messages' });
+  }
+};
+
+
+export const searchRoomMessages = async (req, res) => {
+  const { roomId } = req.params;
+  const { keyword, page = 1, limit = 20 } = req.query;
+
+  try {
+    const messages = await Message.find({ 
+      chatRoomId: roomId, 
+      content: { $regex: keyword, $options: 'i' }  // Case-insensitive search
+    })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.status(200).json(messages);
+  } catch (error) {
+    res.status(500).json({ error: 'Error searching messages' });
+  }
+};

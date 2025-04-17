@@ -1,11 +1,19 @@
 import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
 import { createAndSendNotification } from "../../utils/notificationUtils.js";
+import emojiRegex from 'emoji-regex';
+
 
 const handleMessages = (socket, io) => {
   // === Send Message to Chat Room ===
   socket.on("sendPrivateMessage", async ({ sender, roomId, content }) => {
     if (!sender || !roomId || !content) return;
+
+    const receiverUser = await User.findById(receiver);
+    if (receiverUser.blockedUsers.includes(sender)) {
+      return; // Don't send message
+    }
+
 
     const newMessage = new Message({
       sender,
@@ -19,6 +27,16 @@ const handleMessages = (socket, io) => {
 
     // Set status to delivered since everyone in the room will receive it live
     newMessage.status = "delivered";
+    const regex = emojiRegex();
+    let emojis = [];
+    let match;
+
+    while ((match = regex.exec(content))) {
+      emojis.push(match[0]);
+    }
+
+    newMessage.emojis = emojis;
+
     await newMessage.save();
 
     io.to(roomId).emit("receiveMessage", newMessage);

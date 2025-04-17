@@ -8,7 +8,9 @@ const MessageSchema = new Schema(
         receiver: {type: Schema.Types.ObjectId, ref:"User", required: true},
         chatRoomId: {type: Schema.Types.ObjectId, ref:"ChatRoom", default: null},
         content: {type: String, required: true},
-        messageType: {type: String, enum: ["text", "image", "video", "file"], default: "text"},
+        emojis: [String],
+
+        messageType: {type: String, enum: ["text", "image", "video", "file"], default: null},
         status: {
         type: String, enum: ['sent', 'delivered', 'read'],
         default: 'sent',

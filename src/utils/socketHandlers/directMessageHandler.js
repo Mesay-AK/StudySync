@@ -1,11 +1,19 @@
 import DirectMessage from "../../models/DirectMessage.js";
 import { usersOnline } from "./userHandlers.js";
 import { createAndSendNotification } from "../../utils/notificationUtils.js";
+import emojiRegex from 'emoji-regex';
+
 
 const handleDirectMessages = (socket, io) => {
   // === Send Direct Message ===
   socket.on("sendDirectMessage", async ({ sender, receiver, content }) => {
     if (!sender || !receiver || !content) return;
+
+    const receiverUser = await User.findById(receiver);
+    if (receiverUser.blockedUsers.includes(sender)) {
+      return; // Don't send message
+    }
+
 
     const newMessage = new DirectMessage({
       sender,
@@ -31,7 +39,16 @@ const handleDirectMessages = (socket, io) => {
         content,
       });
     } else {
-      // Save as 'sent' if offline
+      const regex = emojiRegex();
+      let emojis = [];
+      let match;
+
+      while ((match = regex.exec(content))) {
+        emojis.push(match[0]);
+      }
+
+      newMessage.emojis = emojis;
+
       await newMessage.save();
     }
 
