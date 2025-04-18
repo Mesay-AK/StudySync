@@ -18,6 +18,7 @@ const userSchema = Schema(
     friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
     blockedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
     unreadMessages: { type: Number, default: 0 },
+    isAdmin: { type: Boolean, default: false }, 
   },
   { timestamps: true }
 );

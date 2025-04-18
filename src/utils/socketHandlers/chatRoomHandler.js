@@ -31,6 +31,20 @@ const handleChatRooms = (socket) => {
     }
   });
 
+  socket.on("getRoomParticipants", async (roomId, callback) => {
+    try {
+      const sockets = await io.in(roomId).fetchSockets();
+
+      const participantIds = sockets.map(s => s.userId); 
+      const participants = await User.find({ _id: { $in: participantIds } }).select("username profilePicture");
+
+      callback({ success: true, participants });
+    } catch (err) {
+      console.error("Error fetching participants:", err);
+      callback({ success: false, message: "Error fetching participants" });
+    }
+  });
+
   socket.on("leaveRoom", async ({ userId, roomId }) => {
     const room = await ChatRoom.findById(roomId);
     if (!room) return;
