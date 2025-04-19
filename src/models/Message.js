@@ -1,35 +1,24 @@
 import mongoose from "mongoose";
+const { Schema, model } = mongoose;
 
-const {Schema, model} = mongoose;
+const MessageSchema = new Schema({
+  sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  chatRoomId: { type: Schema.Types.ObjectId, ref: "ChatRoom", default: null },
+  content: { type: String },
+  emojis: [String],
+  readBy: [{
+    user: { type: Schema.Types.ObjectId, ref: "User" },
+    readAt: { type: Date }
+  }],
+  media: {
+    url: String,
+    type: { type: String, enum: ["image", "video", "file"] }
+  },
+  messageType: { type: String, enum: ["text", "image", "video", "file"], default: "text" },
+  status: { type: String, enum: ['sent', 'delivered', 'read'], default: 'sent' },
+  isDeleted: { type: Boolean, default: false },
+}, { timestamps: true });
 
-const MessageSchema = new Schema(
-    {
-        sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        receiver: {type: Schema.Types.ObjectId, ref:"User", required: true},
-        chatRoomId: {type: Schema.Types.ObjectId, ref:"ChatRoom", default: null},
-        content: {type: String, required: true},
-        emojis: [String],
-        readBy: [
-        {
-            user: { type: Schema.Types.ObjectId, ref: "User" },
-            readAt: { type: Date },
-        },
-        ],
-        messageType: {type: String, enum: ["text", "image", "video", "file"], default: null},
-        status: {
-        type: String, enum: ['sent', 'delivered', 'read'],
-        default: 'sent',
-        },
-        isDeleted: {type: Boolean, default: false},
-        createdAt: {type: Date, default: Date.now},
-        updatedAt: {type: Date, default: Date.now}
-    },
-    {
-        timestamps: true,
-        
-    }
-)
+MessageSchema.index({ content: "text", emojis: "text" });
 
-
-const Message = model("Message", MessageSchema);
-export default Message;
+export default model("Message", MessageSchema);
