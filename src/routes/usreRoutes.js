@@ -26,11 +26,10 @@ userRouter.patch("/:userId", authenticateToken, checkOwnershipOrAdmin, updateUse
 userRouter.get("/:userId/status", authenticateToken, getUserStatus);
 userRouter.patch("/:userId/status", authenticateToken, checkOwnershipOrAdmin, updateUserStatus);
 userRouter.delete("/:userId", authenticateToken, checkOwnershipOrAdmin, deleteProfile);
-router.post("/block", authenticateToken, checkOwnershipOrAdmin, blockUser);
-router.post("/block", authenticateToken, checkOwnershipOrAdmin, reportMessaege);
-router.post("/block", authenticateToken, checkOwnershipOrAdmin, reportUser);
+userRouter.post("/block", authenticateToken, checkOwnershipOrAdmin, blockUser);
+userRouter.post("/block", authenticateToken, checkOwnershipOrAdmin, reportMessaege);
+userRouter.post("/block", authenticateToken, checkOwnershipOrAdmin, reportUser);
 
-// Admin route
 userRouter.get("/admin/all-users", authenticateToken, authorizeRoles("admin"), getAllUsers);
 
 export default userRouter;

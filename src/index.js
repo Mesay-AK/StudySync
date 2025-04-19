@@ -7,11 +7,14 @@ import passport from 'passport';
 import morgan from 'morgan';
 import path from 'path';
 
-import authRoutes from './routes/authRoutes.js';
-import userRoutes from './routes/userRoutes.js';
-import chatRoomRoutes from './routes/chatRoomRoutes.js';
-import directMessage from './routes/directMessageRoutes.js';
-import notifyRouter from './routes/notificationRoutes.js';
+import {authRouter} from './routes/authRoutes.js';
+import {userRouter} from './routes/userRoutes.js';
+import {directMessageRouter} from './routes/directMessageRoutes.js';
+import {chatRoomRouter} from './routes/chatRoomRoutes.js';
+import {notifyRouter} from './routes/notificationRoutes.js';
+import {adminRouter} from './routes/adminRoutes.js';
+
+
 
 import setupSocket from './config/socket.js';
 
@@ -30,11 +33,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());  
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads'))); 
 
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/messages', directMessage);
-app.use('/api/chatrooms', chatRoomRoutes);
+app.use('/api/auth', authRouter);
+app.use('/api/user', userRouter);
+app.use('/api/messages', directMessageRouter);
+app.use('/api/chatrooms', chatRoomRouter);
 app.use('/api/notifications', notifyRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

@@ -21,9 +21,9 @@ adminRouter.post("/ban-user", banUser);
 adminRouter.post("/unban-user", unbanUser);
 
 
-router.use(isAuthenticated);
+adminRouter.use(isAuthenticated);
 
-router.post("/promote", promoteToRoomAdmin);
-router.post("/demote", demoteFromRoomAdmin);
+adminRouter.post("/promote", promoteToRoomAdmin);
+adminRouter.post("/demote", demoteFromRoomAdmin);
 
 export default adminRouter;
