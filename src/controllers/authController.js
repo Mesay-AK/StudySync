@@ -1,23 +1,30 @@
 import User from '../models/User.js';
-import {
-  comparePassword,
-  hashPassword
-} from '../utils/passwordHelpers/password-helper.js';
+import { comparePassword, hashPassword } from '../utils/passwordHelpers/password-helper.js';
 import {
   generateAccessToken,
   generateRefreshToken,
   validateRefreshToken,
   deleteRefreshToken,
-  generatePasswordResetToken
+  generatePasswordResetToken,
+  generateVerificationToken
 } from '../utils/Tokens/jwtTokens.js';
+import sendEmail from '../utils/emailService.js';  // Assuming sendEmail utility is available
 
+// Register User with Email Verification
 export const registerUser = async (req, res) => {
   try {
     const { username, email, password, displayName } = req.body;
 
+    // Check if the email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'Email already in use' });
+    }
+
+    // Password Strength Validation
+    const passwordStrength = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()_+])[A-Za-z\d!@#$%^&*()_+]{8,}$/;
+    if (!passwordStrength.test(password)) {
+      return res.status(400).json({ message: 'Password is too weak' });
     }
 
     const hashedPassword = await hashPassword(password);
@@ -29,13 +36,27 @@ export const registerUser = async (req, res) => {
     });
 
     await newUser.save();
-    return res.status(201).json({ message: 'User registered successfully', userId: newUser._id });
+
+    // Generate email verification token
+    const verificationToken = generateVerificationToken();
+    newUser.emailVerificationToken = verificationToken;
+    await newUser.save();
+
+    const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    await sendEmail({
+      to: email,
+      subject: 'Email Verification',
+      html: `<p>Click <a href="${verificationLink}">here</a> to verify your email address.</p>`
+    });
+
+    return res.status(201).json({ message: 'User registered successfully, please verify your email.' });
   } catch (error) {
     console.error('Error registering user:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
+// Login User
 export const logInUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -62,9 +83,9 @@ export const logInUser = async (req, res) => {
   }
 };
 
+// Refresh Access Token
 export const refreshToken = async (req, res) => {
   const { token } = req.body;
-
   if (!token) return res.status(401).json({ message: 'Refresh token not provided' });
 
   try {
@@ -77,9 +98,9 @@ export const refreshToken = async (req, res) => {
   }
 };
 
+// Log Out User
 export const logOutUser = async (req, res) => {
   const { token } = req.body;
-
   if (!token) return res.status(401).json({ message: 'Refresh token not provided' });
 
   try {
@@ -92,8 +113,7 @@ export const logOutUser = async (req, res) => {
   }
 };
 
-
-
+// Password Reset Request
 export const requestPasswordReset = async (req, res) => {
   const { email } = req.body;
 
@@ -105,7 +125,7 @@ export const requestPasswordReset = async (req, res) => {
 
     const resetToken = generatePasswordResetToken();
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000; 
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour expiration
     await user.save();
 
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
@@ -122,7 +142,7 @@ export const requestPasswordReset = async (req, res) => {
   }
 };
 
-
+// Password Reset Handler
 export const resetPassword = async (req, res) => {
   const { token, newPassword } = req.body;
 

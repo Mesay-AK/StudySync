@@ -1,7 +1,7 @@
+// UserController.js
 import ChatRoom from "../models/ChatRoom.js";
 import Message from "../models/Message.js";
 import { isValidObjectId } from "mongoose";
-
 
 export const getAllPublicRooms = async (req, res) => {
   try {
@@ -16,6 +16,7 @@ export const getAllPublicRooms = async (req, res) => {
 
     res.status(200).json(roomsWithCount);
   } catch (err) {
+    console.error("Error fetching public rooms:", err);
     res.status(500).json({ error: "Failed to fetch rooms" });
   }
 };
@@ -39,6 +40,7 @@ export const createRoom = async (req, res) => {
     const savedRoom = await newRoom.save();
     res.status(201).json(savedRoom);
   } catch (err) {
+    console.error("Error creating room:", err);
     res.status(500).json({ error: "Room creation failed" });
   }
 };
@@ -63,6 +65,7 @@ export const joinPublicRoom = async (req, res) => {
 
     res.status(200).json({ message: "Joined public room", room });
   } catch (err) {
+    console.error("Error joining public room:", err);
     res.status(500).json({ error: "Join failed" });
   }
 };
@@ -84,6 +87,7 @@ export const joinPrivateRoom = async (req, res) => {
 
     res.status(200).json({ message: "Joined private room" });
   } catch (err) {
+    console.error("Error joining private room:", err);
     res.status(500).json({ error: "Join failed" });
   }
 };
@@ -106,6 +110,7 @@ export const inviteUsers = async (req, res) => {
 
     res.status(200).json(room);
   } catch (err) {
+    console.error("Error inviting users:", err);
     res.status(500).json({ error: "Invitation failed" });
   }
 };
@@ -122,6 +127,7 @@ export const leaveRoom = async (req, res) => {
 
     res.status(200).json({ message: "Left room" });
   } catch (err) {
+    console.error("Error leaving room:", err);
     res.status(500).json({ error: "Failed to leave room" });
   }
 };
@@ -143,6 +149,7 @@ export const deleteRoom = async (req, res) => {
 
     res.status(200).json({ message: "Room marked as deleted" });
   } catch (err) {
+    console.error("Error deleting room:", err);
     res.status(500).json({ error: "Delete failed" });
   }
 };
@@ -151,9 +158,12 @@ export const getRoomMessages = async (req, res) => {
   const { roomId } = req.params;
 
   try {
-    const messages = await Message.find({ chatRoomId: roomId }).sort({ createdAt: 1 });
+    const messages = await Message.find({ chatRoomId: roomId })
+      .sort({ createdAt: 1 })
+      .select("sender content createdAt");
     res.status(200).json(messages);
   } catch (err) {
+    console.error("Error fetching room messages:", err);
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 };

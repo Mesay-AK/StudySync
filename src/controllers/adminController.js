@@ -1,38 +1,41 @@
+// controllers/adminController.js
 import User from "../models/User.js";
 import Message from "../models/Message.js";
 import Report from "../models/Report.js";
+import ChatRoom from "../models/ChatRoom.js";
 
-// View reports
+// View all reports
 export const viewReports = async (req, res) => {
   try {
-    const reports = await Report.find().populate("reporter reportedUser");
+    const reports = await Report.find()
+      .populate("reporter", "username email")
+      .populate("reportedUser", "username email")
+      .populate("reportedMessage");
+
     res.status(200).json({ success: true, reports });
   } catch (err) {
     res.status(500).json({ success: false, message: "Error fetching reports" });
   }
 };
 
-// Resolve report
+// Resolve a report
 export const resolveReport = async (req, res) => {
   const { reportId, action } = req.body;
 
   try {
-    const report = await Report.findById(reportId);
+    const report = await Report.findById(reportId).populate("reportedMessage");
     if (!report) return res.status(404).json({ success: false, message: "Report not found" });
 
-    if (action === "deleteMessage" && report.type === "message") {
-      const message = await Message.findById(report.contentId);
-      if (message) {
-        message.isDeleted = true;
-        await message.save();
-      }
+    if (action === "deleteMessage" && report.reportedMessage) {
+      report.reportedMessage.isDeleted = true;
+      await report.reportedMessage.save();
     }
 
-    if (action === "banUser" && report.type === "user") {
-      await User.findByIdAndUpdate(report.contentId, { isBanned: true });
+    if (action === "banUser" && report.reportedUser) {
+      await User.findByIdAndUpdate(report.reportedUser._id, { isBanned: true });
     }
 
-    report.status = "resolved";
+    report.status = "reviewed";
     await report.save();
 
     res.status(200).json({ success: true, message: "Report resolved" });
@@ -41,49 +44,36 @@ export const resolveReport = async (req, res) => {
   }
 };
 
-// Ban user
-export const banUser = async (req, res) => {
-  const { userId } = req.body;
+// Ban or Unban user
+export const toggleBanUser = async (req, res) => {
+  const { userId, ban = true } = req.body;
 
   try {
-    const user = await User.findByIdAndUpdate(userId, { isBanned: true }, { new: true });
+    const user = await User.findByIdAndUpdate(userId, { isBanned: ban }, { new: true });
     if (!user) return res.status(404).json({ message: "User not found" });
-    res.status(200).json({ message: "User has been banned", user });
-  } catch {
-    res.status(500).json({ message: "Error banning user" });
+
+    res.status(200).json({ message: `User has been ${ban ? "banned" : "unbanned"}`, user });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating ban status" });
   }
 };
 
-// Unban user
-export const unbanUser = async (req, res) => {
-  const { userId } = req.body;
-
-  try {
-    const user = await User.findByIdAndUpdate(userId, { isBanned: false }, { new: true });
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.status(200).json({ message: "User has been unbanned", user });
-  } catch {
-    res.status(500).json({ message: "Error unbanning user" });
-  }
-};
-
-// Delete user
+// Delete user (soft delete option)
 export const deleteUser = async (req, res) => {
   const { userId } = req.body;
+
   try {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    await user.deleteOne();
+    await user.deleteOne(); // Replace with soft delete if needed
     res.status(200).json({ message: "User deleted successfully" });
   } catch {
     res.status(500).json({ message: "Error deleting user" });
   }
 };
 
-
-
-
+// Promote user to room admin
 export const promoteToRoomAdmin = async (req, res) => {
   const { roomId, userId } = req.body;
 
@@ -114,10 +104,7 @@ export const demoteFromRoomAdmin = async (req, res) => {
     return res.status(403).json({ message: "You are not a room admin" });
   }
 
-  const index = room.admins.indexOf(userId);
-  if (index === -1) return res.status(400).json({ message: "User is not an admin" });
-
-  room.admins.splice(index, 1);
+  room.admins = room.admins.filter(adminId => adminId.toString() !== userId);
   await room.save();
 
   res.status(200).json({ message: "User demoted from room admin" });

@@ -1,9 +1,10 @@
 import ChatRoom from "../models/ChatRoom.js";
 import Message from "../models/Message.js";
+import { sendEmail } from "../utils/email.js"; // Assuming you have a utility function for sending emails.
 
 export const getAllPublicRooms = async (req, res) => {
   try {
-    const rooms = await ChatRoom.find({ type: "public" });
+    const rooms = await ChatRoom.find({ type: "public" }).select("-invitedUsers"); // Hide invitedUsers for public rooms
     res.status(200).json(rooms);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch rooms" });
@@ -11,13 +12,15 @@ export const getAllPublicRooms = async (req, res) => {
 };
 
 export const createRoom = async (req, res) => {
-  const { name, type, creatorId } = req.body;
+  const { name, type, creatorId, subject } = req.body;
 
   try {
+    // Ensure creator is part of the new room
     const newRoom = new ChatRoom({
       name,
       type,
       members: [creatorId],
+      subject, // Added subject to categorize rooms
     });
 
     const savedRoom = await newRoom.save();
@@ -42,7 +45,7 @@ export const joinPrivateRoom = async (req, res) => {
       await room.save();
     }
 
-    res.status(200).json({ message: "Joined private room" });
+    res.status(200).json({ message: "Joined private room successfully" });
   } catch (err) {
     res.status(500).json({ error: "Join failed" });
   }
@@ -56,11 +59,22 @@ export const inviteUsers = async (req, res) => {
     const room = await ChatRoom.findById(roomId);
     if (!room) return res.status(404).json({ error: "Room not found" });
 
+    // Add only new invitees (avoid duplicates)
     const newInvites = userIds.filter((id) => !room.invitedUsers.includes(id));
     room.invitedUsers.push(...newInvites);
-    await room.save();
 
-    res.status(200).json(room);
+    // Optionally, send an email notification to users invited
+    const invitedUsers = await User.find({ _id: { $in: newInvites } }); // Assuming you have a User model
+    invitedUsers.forEach((user) => {
+      sendEmail({
+        to: user.email,
+        subject: `You're invited to join the room: ${room.name}`,
+        html: `<p>You have been invited to join the room: <strong>${room.name}</strong></p>`,
+      });
+    });
+
+    await room.save();
+    res.status(200).json({ message: "Users invited successfully", room });
   } catch (err) {
     res.status(500).json({ error: "Invitation failed" });
   }
@@ -74,38 +88,37 @@ export const sendMessageToRoom = async (req, res) => {
     const newMessage = new Message({ sender, chatRoomId: roomId, content });
     await newMessage.save();
 
+
     res.status(201).json(newMessage);
   } catch (err) {
-    res.status(500).json({ error: "Message failed" });
+    res.status(500).json({ error: "Message sending failed" });
   }
 };
 
-
 export const getRoomMessages = async (req, res) => {
   const { roomId } = req.params;
-  const { page = 1, limit = 20 } = req.query;  
+  const { page = 1, limit = 20 } = req.query;
 
   try {
     const messages = await Message.find({ chatRoomId: roomId })
-      .sort({ createdAt: -1 })  
-      .skip((page - 1) * limit)  
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
       .limit(limit);
 
     res.status(200).json(messages);
   } catch (error) {
-    res.status(500).json({ error: 'Error fetching messages' });
+    res.status(500).json({ error: "Error fetching messages" });
   }
 };
-
 
 export const searchRoomMessages = async (req, res) => {
   const { roomId } = req.params;
   const { keyword, page = 1, limit = 20 } = req.query;
 
   try {
-    const messages = await Message.find({ 
-      chatRoomId: roomId, 
-      content: { $regex: keyword, $options: 'i' }  // Case-insensitive search
+    const messages = await Message.find({
+      chatRoomId: roomId,
+      content: { $regex: keyword, $options: "i" }, // Case-insensitive search
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
@@ -113,6 +126,36 @@ export const searchRoomMessages = async (req, res) => {
 
     res.status(200).json(messages);
   } catch (error) {
-    res.status(500).json({ error: 'Error searching messages' });
+    res.status(500).json({ error: "Error searching messages" });
+  }
+};
+
+export const deleteMessage = async (req, res) => {
+  const { roomId, messageId } = req.params;
+
+  try {
+    const message = await Message.findOneAndDelete({ _id: messageId, chatRoomId: roomId });
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    res.status(200).json({ message: "Message deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Error deleting message" });
+  }
+};
+
+export const deleteRoom = async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await ChatRoom.findByIdAndDelete(roomId);
+    if (!room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    res.status(200).json({ message: "Room deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Error deleting room" });
   }
 };

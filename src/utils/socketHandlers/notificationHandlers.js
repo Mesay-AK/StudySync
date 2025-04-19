@@ -8,15 +8,23 @@ export const createAndSendNotification = async ({
   content = "", 
   metadata = {} 
 }) => {
-  const notification = new Notification({
-    type,
-    recipient: recipientId,
-    sender: senderId,
-    content,
-    metadata,
-  });
+  try {
+    const notification = new Notification({
+      type,
+      recipient: recipientId,
+      sender: senderId,
+      content,
+      metadata,
+    });
 
-  await notification.save();
+    // Save notification to database
+    await notification.save();
 
-  io.to(recipientId).emit("newNotification", notification);
+    // Emit to the recipient through Socket.IO
+    io.to(recipientId).emit("newNotification", notification);
+  } catch (error) {
+    console.error("Error creating and sending notification:", error.message);
+    // Optional: Emit error message to the client (if needed)
+    io.to(recipientId).emit("error", { message: "Failed to send notification." });
+  }
 };
