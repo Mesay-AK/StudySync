@@ -29,7 +29,7 @@ export const getDirectMessages = async (req, res) => {
 };
 
 export const searchDirectMessages = async (req, res) => {
-  const { senderId, receiverId } = req.params;
+  const { senderId, receiverId } = req.body;
   const { keyword, page = 1, limit = 20 } = req.query;
 
   if (!keyword) return res.status(400).json({ error: "Missing search keyword" });

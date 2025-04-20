@@ -5,7 +5,7 @@ import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { usersOnline } from "./userHandlers.js";
 
-export const handleMessageEvents = (socket, io) => {
+export const handleMessages = (socket, io) => {
   socket.on("sendPrivateMessage", async ({ sender, roomId, content }) => {
     try {
       if (!sender || !roomId || !content?.trim()) {

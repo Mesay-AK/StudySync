@@ -18,14 +18,12 @@ directMessageRouter.post("/send", sendDirectMessage);
 directMessageRouter.patch('/direct-messages/:messageId/seen', markAsSeen);
 directMessageRouter.patch("/update/:messageId", updateDirectMessage);
 directMessageRouter.delete("/delete/:messageId", deleteDirectMessage);
-directMessageRouter.get("/search", searchMessages);
 directMessageRouter.get("/unread", getUnreadMessages);
 directMessageRouter.post("/upload",uploads, uploadMedia);
-messageRouter.get('/direct/:senderId/:receiverId', getDirectMessages);
+directMessageRouter.get('/direct/:senderId/:receiverId', getDirectMessages);
 directMessageRouter.get('/direct/:senderId/:receiverId/search', searchDirectMessages);
-directMessageRoute.rpatch("/seen/conversation/:senderId", markConversationAsSeen);
-directMessageRouter
-directMessageRouter
+directMessageRouter.patch("/seen/conversation/:senderId", markConversationAsSeen);
+
 
 
 export default directMessageRouter;

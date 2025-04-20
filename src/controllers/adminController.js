@@ -1,10 +1,10 @@
 // controllers/adminController.js
 import User from "../models/User.js";
-import Message from "../models/Message.js";
+// import Message from "../models/Message.js";
 import Report from "../models/Report.js";
 import ChatRoom from "../models/ChatRoom.js";
 
-// View all reports
+
 export const viewReports = async (req, res) => {
   try {
     const reports = await Report.find()
@@ -18,7 +18,6 @@ export const viewReports = async (req, res) => {
   }
 };
 
-// Resolve a report
 export const resolveReport = async (req, res) => {
   const { reportId, action } = req.body;
 

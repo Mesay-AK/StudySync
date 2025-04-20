@@ -241,6 +241,25 @@ export const deleteRoom = async (req, res) => {
 
 
 
+export const leaveRoom = async (req, res) => {
+    try {
+        const { userId, roomId } = req.body;
+        const room = await ChatRoom.findById(roomId);
+
+        if (!room) return res.status(404).json({ message: "Room not found" });
+
+        room.members = room.members.filter(member => member.toString() !== userId);
+        await room.save();
+
+        res.status(200).json({ message: "Left room successfully", room });
+
+    } catch (error) {
+        
+        console.error("Error leaving chat room:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 export const reportUser = async (req, res) => {
   try {
     const { userId } = req.params; // user doing the report
