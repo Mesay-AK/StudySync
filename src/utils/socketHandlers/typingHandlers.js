@@ -1,11 +1,46 @@
+import User from "../../models/User.js";
+import ChatRoom from "../../models/ChatRoom.js";
+import { usersOnline } from "./userHandlers.js";
+
 const handleTypingIndicators = (socket, io) => {
 
-  socket.on("typing", ({ roomId, userId, isDirect = false, receiverId = null }) => {
+  // === Handle Typing Start ===
+  socket.on("typing", async ({ roomId, userId, isDirect = false, receiverId = null }) => {
     try {
+      const senderUser = await User.findById(userId);
+      if (!senderUser) return;
+
       if (isDirect && receiverId) {
-        io.to(receiverId).emit("typing", { userId, isDirect: true });
+        const receiverUser = await User.findById(receiverId);
+        const receiverSocketId = [...usersOnline.entries()].find(([, id]) => id === receiverId)?.[0];
+
+        if (
+          receiverUser &&
+          !receiverUser.blockedUsers.includes(userId) &&
+          !senderUser.blockedUsers.includes(receiverId) &&
+          receiverSocketId
+        ) {
+          io.to(receiverSocketId).emit("typing", { userId, isDirect: true });
+        }
       } else if (!isDirect && roomId) {
-        io.to(roomId).emit("typing", { userId, roomId, isDirect: false });
+        const room = await ChatRoom.findById(roomId);
+        if (!room) return;
+
+        for (const memberId of room.members) {
+          if (memberId.toString() === userId) continue;
+
+          const member = await User.findById(memberId);
+          const memberSocketId = [...usersOnline.entries()].find(([, id]) => id === memberId.toString())?.[0];
+
+          if (
+            member &&
+            !member.blockedUsers.includes(userId) &&
+            !senderUser.blockedUsers.includes(member._id.toString()) &&
+            memberSocketId
+          ) {
+            io.to(memberSocketId).emit("typing", { userId, roomId, isDirect: false });
+          }
+        }
       } else {
         console.error("Missing parameters for 'typing' event.");
       }
@@ -14,20 +49,43 @@ const handleTypingIndicators = (socket, io) => {
     }
   });
 
-  /**
-   * Handles the 'stopTyping' event for stopping the typing indicator.
-   * @param {Object} params - The event parameters.
-   * @param {String} params.roomId - The ID of the room (if group chat).
-   * @param {String} params.userId - The ID of the user stopping typing.
-   * @param {Boolean} [params.isDirect=false] - Flag to check if it's a direct message.
-   * @param {String} [params.receiverId=null] - The ID of the receiver (if direct message).
-   */
-  socket.on("stopTyping", ({ roomId, userId, isDirect = false, receiverId = null }) => {
+  // === Handle Typing Stop ===
+  socket.on("stopTyping", async ({ roomId, userId, isDirect = false, receiverId = null }) => {
     try {
+      const senderUser = await User.findById(userId);
+      if (!senderUser) return;
+
       if (isDirect && receiverId) {
-        io.to(receiverId).emit("stopTyping", { userId, isDirect: true });
+        const receiverUser = await User.findById(receiverId);
+        const receiverSocketId = [...usersOnline.entries()].find(([, id]) => id === receiverId)?.[0];
+
+        if (
+          receiverUser &&
+          !receiverUser.blockedUsers.includes(userId) &&
+          !senderUser.blockedUsers.includes(receiverId) &&
+          receiverSocketId
+        ) {
+          io.to(receiverSocketId).emit("stopTyping", { userId, isDirect: true });
+        }
       } else if (!isDirect && roomId) {
-        io.to(roomId).emit("stopTyping", { userId, roomId, isDirect: false });
+        const room = await ChatRoom.findById(roomId);
+        if (!room) return;
+
+        for (const memberId of room.members) {
+          if (memberId.toString() === userId) continue;
+
+          const member = await User.findById(memberId);
+          const memberSocketId = [...usersOnline.entries()].find(([, id]) => id === memberId.toString())?.[0];
+
+          if (
+            member &&
+            !member.blockedUsers.includes(userId) &&
+            !senderUser.blockedUsers.includes(member._id.toString()) &&
+            memberSocketId
+          ) {
+            io.to(memberSocketId).emit("stopTyping", { userId, roomId, isDirect: false });
+          }
+        }
       } else {
         console.error("Missing parameters for 'stopTyping' event.");
       }

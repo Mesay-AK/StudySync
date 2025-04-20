@@ -1,17 +1,12 @@
 import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
-import { createAndSendNotification } from "../../utils/notificationUtils.js";
+import { createAndSendNotification } from "./notificationHandlers.js"
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { usersOnline } from "./userHandlers.js";
 
-/**
- * Handles socket events related to room-based messages.
- * @param {Socket} socket - Connected socket instance.
- * @param {Server} io - Socket.IO server instance.
- */
-const handleMessages = (socket, io) => {
-  // === Send Room Message ===
+
+export const handleMessageEvents = (socket, io) => {
   socket.on("sendPrivateMessage", async ({ sender, roomId, content }) => {
     try {
       if (!sender || !roomId || !content?.trim()) {
@@ -28,8 +23,18 @@ const handleMessages = (socket, io) => {
         });
       }
 
+      // Extract emojis if any
       const emojiMatches = [...content.matchAll(emojiRegex())].map(match => match[0]);
 
+      // Filter out members who have blocked the sender
+      const validMembers = room.members.filter(async (memberId) => {
+        const member = await User.findById(memberId);
+        return !member.blockedUsers.includes(sender); // Exclude blocked members
+      });
+
+      if (validMembers.length === 0) return; // If no valid members to send to
+
+      // Create the message object
       const newMessage = new Message({
         sender,
         chatRoomId: roomId,
@@ -38,60 +43,35 @@ const handleMessages = (socket, io) => {
         emojis: emojiMatches,
       });
 
+      // Save the message
       await newMessage.save();
 
-      // Broadcast to room
-      io.to(roomId).emit("receiveMessage", newMessage);
+      // Notify all valid members (those who haven't blocked the sender)
+      for (const memberId of room.members) {
+        const memberUser = await User.findById(memberId);
+        if (!memberUser?.blockedUsers.includes(sender)) {
+          // Check if the member is online and send the message
+          const socketId = [...usersOnline.entries()].find(([, id]) => id === memberId.toString())?.[0];
+          if (socketId) {
+            io.to(socketId).emit("receiveMessage", newMessage);
+          }
 
-      // Notify room members (excluding sender if you want)
-      await Promise.all(
-        room.members.map((memberId) =>
-          createAndSendNotification({
+          // Send notification if the user hasn't blocked the sender
+          await createAndSendNotification({
             io,
             type: "room_message",
             recipientId: memberId.toString(),
             senderId: sender,
             content,
             metadata: { roomId },
-          })
-        )
-      );
+          });
+        }
+      }
     } catch (err) {
       console.error("sendPrivateMessage error:", err.message);
       socket.emit("error", { message: "Failed to send message." });
     }
   });
 
-  // === Mark Room Messages As Read ===
-  socket.on("markRoomMessagesAsRead", async ({ roomId, userId }) => {
-    try {
-      if (!roomId || !userId) return;
 
-      const unreadMessages = await Message.find({
-        chatRoomId: roomId,
-        sender: { $ne: userId },
-        "readBy.user": { $ne: userId },
-      });
-
-      for (const msg of unreadMessages) {
-        msg.readBy.push({ user: userId, readAt: new Date() });
-        msg.status = "read";
-        await msg.save();
-
-        const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === msg.sender)?.[0];
-        if (senderSocketId) {
-          io.to(senderSocketId).emit("roomMessageRead", {
-            messageId: msg._id.toString(),
-            roomId,
-            readBy: userId,
-          });
-        }
-      }
-    } catch (err) {
-      console.error("markRoomMessagesAsRead error:", err.message);
-      socket.emit("error", { message: "Failed to mark messages as read." });
-    }
-  });
-};
-
-export { handleMessages };
+}

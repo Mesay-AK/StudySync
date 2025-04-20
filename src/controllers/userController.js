@@ -167,3 +167,78 @@ export const getRoomMessages = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 };
+
+
+export const blockUser = async (req, res) => {
+  try {
+    const { userId } = req.params; // ID of the user doing the blocking
+    const { blockedUserId } = req.body; // ID of the user to block
+
+    if (userId === blockedUserId) {
+      return res.status(400).json({ message: "You cannot block yourself." });
+    }
+
+    const user = await User.findById(userId);
+    const blockedUser = await User.findById(blockedUserId);
+
+    if (!user || !blockedUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    if (user.blockedUsers.includes(blockedUserId)) {
+      return res.status(400).json({ message: "User is already blocked." });
+    }
+
+    user.blockedUsers.push(blockedUserId);
+    await user.save();
+
+    res.status(200).json({ message: "User blocked successfully." });
+  } catch (error) {
+    console.error("Error blocking user:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+
+
+export const getBlockedUsers = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const user = await User.findById(userId).populate("blockedUsers", "username email profilePicture");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    res.status(200).json({ blockedUsers: user.blockedUsers });
+  } catch (error) {
+    console.error("Error fetching blocked users:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+
+export const unBlockUser = async (req, res) => {
+  const { userId } = req.params;       
+  const { unblockUserId } = req.body;   
+
+  try {
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    user.blockedUsers = user.blockedUsers.filter(
+      (id) => id.toString() !== unblockUserId
+    );
+
+    await user.save();
+
+    res.status(200).json({ message: "User unblocked successfully." });
+  } catch (error) {
+    console.error("Error unblocking user:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};

@@ -7,29 +7,31 @@ import {
   updateUserStatus,
   getAllUsers,
   blockUser,
-  reportMessaege,
-  reportUser
+  getBlockedUsers,
+  unblockUser,
+
 } from "../controllers/userController.js";
 
-import {
-  authenticateToken,
-  validateUser,
-  checkOwnershipOrAdmin,
-  authorizeRoles,
-} from "../middleware/authMiddleware.js";
+import {authenticate,
+      authorizeRoles, 
+      checkOwnershipOrAdmin, 
+      validateUser}      
+from "../middleware/authMiddleware.js";
+  
 
 
 const userRouter = express.Router();
 
-userRouter.get("/:userId", authenticateToken, validateUser, getUserProfile);
-userRouter.patch("/:userId", authenticateToken, checkOwnershipOrAdmin, updateUserProfile);
-userRouter.get("/:userId/status", authenticateToken, getUserStatus);
-userRouter.patch("/:userId/status", authenticateToken, checkOwnershipOrAdmin, updateUserStatus);
-userRouter.delete("/:userId", authenticateToken, checkOwnershipOrAdmin, deleteProfile);
-userRouter.post("/block", authenticateToken, checkOwnershipOrAdmin, blockUser);
-userRouter.post("/block", authenticateToken, checkOwnershipOrAdmin, reportMessaege);
-userRouter.post("/block", authenticateToken, checkOwnershipOrAdmin, reportUser);
+userRouter.get("/:userId", authenticate, validateUser, getUserProfile);
+userRouter.patch("/:userId", authenticate, checkOwnershipOrAdmin, updateUserProfile);
+userRouter.get("/:userId/status", authenticate, getUserStatus);
+userRouter.patch("/:userId/status", authenticate, checkOwnershipOrAdmin, updateUserStatus);
+userRouter.delete("/:userId", authenticate, checkOwnershipOrAdmin, deleteProfile);
 
-userRouter.get("/admin/all-users", authenticateToken, authorizeRoles("admin"), getAllUsers);
+userRouter.post("/block", authenticate, checkOwnershipOrAdmin, blockUser);
+
+userRouter.get("/admin/all-users", authenticate, authorizeRoles("admin"), getAllUsers);
+userRouter.get("/blocked/:userId", authenticate, checkOwnershipOrAdmin, getBlockedUsers);
+userRouter.patch("/unblock/:userId", authenticate, checkOwnershipOrAdmin, unblockUser);
 
 export default userRouter;

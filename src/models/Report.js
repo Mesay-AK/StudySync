@@ -1,13 +1,16 @@
+// models/Report.js
 import mongoose from "mongoose";
-const { Schema, model } = mongoose;
 
-const reportSchema = new Schema({
-  reporter: { type: Schema.Types.ObjectId, ref: "User", required: true },
-  reportedUser: { type: Schema.Types.ObjectId, ref: "User" },
-  reportedMessage: { type: Schema.Types.ObjectId, ref: "Message" },
-  roomId: { type: Schema.Types.ObjectId, ref: "ChatRoom" }, // new
-  reason: { type: String, required: true },
-  status: { type: String, enum: ["pending", "reviewed"], default: "pending" },
-}, { timestamps: true });
+const reportSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: ["user", "message"], required: true },
+    reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    targetUser: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    targetMessage: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
+    reason: { type: String, required: true },
+    status: { type: String, enum: ["pending", "reviewed"], default: "pending" },
+  },
+  { timestamps: true }
+);
 
-export default model("Report", reportSchema);
+export default mongoose.model("Report", reportSchema);

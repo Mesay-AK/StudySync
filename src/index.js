@@ -7,15 +7,13 @@ import passport from 'passport';
 import morgan from 'morgan';
 import path from 'path';
 
-import {authRouter} from './routes/authRoutes.js';
-import {userRouter} from './routes/userRoutes.js';
-import {directMessageRouter} from './routes/directMessageRoutes.js';
-import {chatRoomRouter} from './routes/chatRoomRoutes.js';
-import {notifyRouter} from './routes/notificationRoutes.js';
-import {adminRouter} from './routes/adminRoutes.js';
 
-
-
+import authRouter from './routes/authRoutes.js';
+import userRouter from './routes/usreRoutes.js';
+import directMessageRouter from './routes/directMessageRoutes.js';
+import chatRoomRouter from './routes/chatRoomRoutes.js';
+import notifyRouter from './routes/notificationRoutes.js';
+import adminRouter from './routes/adminRoutes.js';
 import setupSocket from './config/socket.js';
 
 dotenv.config();

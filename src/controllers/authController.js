@@ -1,16 +1,15 @@
 import User from '../models/User.js';
 import { comparePassword, hashPassword } from '../utils/passwordHelpers/password-helper.js';
-import {
-  generateAccessToken,
-  generateRefreshToken,
-  validateRefreshToken,
-  deleteRefreshToken,
-  generatePasswordResetToken,
-  generateVerificationToken
+import {generateRefreshToken,
+        generateAccessToken,
+        validateRefreshToken,
+        verifyAccessToken,
+        deleteRefreshToken,
+        generatePasswordResetToken,
 } from '../utils/Tokens/jwtTokens.js';
-import sendEmail from '../utils/emailService.js';  // Assuming sendEmail utility is available
+import {sendEmail} from "../utils/emailService.js";
 
-// Register User with Email Verification
+
 export const registerUser = async (req, res) => {
   try {
     const { username, email, password, displayName } = req.body;

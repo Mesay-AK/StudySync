@@ -1,7 +1,7 @@
 // routes/authRoutes.js
 import express from 'express';
 import passport from 'passport';
-import { handleOAuthSuccess } from '../utils/Tokens/outhTokens.js';
+import {handleOAuthSuccess} from '../utils/Tokens/oauthTokens.js';
 import { validateUser } from '../middleware/authMiddleware.js';
 
 import {

@@ -65,5 +65,5 @@ export const deleteRefreshToken = async (sessionId) => {
 };
 
 export const generatePasswordResetToken = () => {
-  return crypto.randomBytes(32).toString('hex'); // Generates a random token
+  return crypto.randomBytes(32).toString('hex');
 }

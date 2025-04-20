@@ -1,15 +1,13 @@
-import {sendMessage, 
+import { sendMessage, 
+        markAsSeen, 
         getMessages, 
         deleteMessage, 
-        markAsSeen, 
         searchMessages, 
-        getDirectMessages,
-        searchDirectMessages
-} from "../../src/controllers/directMessageController.js";
+        uploadMedia } 
+        
+from "../controllers/directMessageController.js";
 import express from "express";
-import { uploads } from "../../src/middleware/multer.js";
-import { uploadMedia } from "../../src/controllers/mediaController.js";
-
+import { uploads } from "../middleware/mediaMiddleware.js"
 
 const directMessageRouter = express.Router();
 

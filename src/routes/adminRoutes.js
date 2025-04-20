@@ -8,8 +8,8 @@ import {
     promoteToRoomAdmin,
     demoteFromRoomAdmin, 
 } from "../controllers/adminController.js";
-import { isAdmin } from "../middlewares/isAdmin.js";
-import { authenticate, validateUser } from "../middlewares/authMiddleware.js";
+import { isAdmin } from "../middleware/adminMiddleware.js";
+import { authenticate, validateUser } from "../middleware/authMiddleware.js";
 
 const adminRouter = express.Router();
 router.use(authenticate, validateUser, isAdmin);

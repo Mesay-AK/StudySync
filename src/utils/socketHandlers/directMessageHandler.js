@@ -1,6 +1,6 @@
 import DirectMessage from "../../models/DirectMessage.js";
 import { usersOnline } from "./userHandlers.js";
-import { createAndSendNotification } from "../../utils/notificationUtils.js";
+import { createAndSendNotification } from "./notificationHandlers.js"
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 

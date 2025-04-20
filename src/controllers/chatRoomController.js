@@ -1,6 +1,7 @@
 import ChatRoom from "../models/ChatRoom.js";
 import Message from "../models/Message.js";
-import { sendEmail } from "../utils/email.js"; // Assuming you have a utility function for sending emails.
+import { sendEmail } from "../utils/emailService.js";
+import Report from "../models/Report.js";
 
 export const getAllPublicRooms = async (req, res) => {
   try {
@@ -29,6 +30,31 @@ export const createRoom = async (req, res) => {
     res.status(500).json({ error: "Room creation failed" });
   }
 };
+
+
+export const joinPublicRoom = async (req, res) => {
+  const { roomId } = req.params;
+  const { userId } = req.body;
+
+  try {
+    const room = await ChatRoom.findById(roomId);
+    if (!room || room.type !== "public") {
+      return res.status(404).json({ error: "Public room not found" });
+    }
+
+    // Avoid duplicate entry
+    if (!room.members.includes(userId)) {
+      room.members.push(userId);
+      await room.save();
+    }
+
+    res.status(200).json({ message: "Joined public room successfully", room });
+  } catch (err) {
+    console.error("Error joining public room:", err);
+    res.status(500).json({ error: "Failed to join public room" });
+  }
+};
+
 
 export const joinPrivateRoom = async (req, res) => {
   const { roomId } = req.params;
@@ -157,5 +183,67 @@ export const deleteRoom = async (req, res) => {
     res.status(200).json({ message: "Room deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: "Error deleting room" });
+  }
+};
+
+
+
+export const reportUser = async (req, res) => {
+  try {
+    const { userId } = req.params; // user doing the report
+    const { targetUserId, reason } = req.body;
+
+    if (!targetUserId || !reason) {
+      return res.status(400).json({ message: "Target user and reason are required." });
+    }
+
+    const reportedUser = await User.findById(targetUserId);
+    if (!reportedUser) {
+      return res.status(404).json({ message: "User to report not found." });
+    }
+
+    const report = new Report({
+      type: "user",
+      reportedBy: userId,
+      targetUser: targetUserId,
+      reason,
+    });
+
+    await report.save();
+    res.status(201).json({ message: "User reported successfully." });
+  } catch (error) {
+    console.error("Error reporting user:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+
+
+const reportMessage = async (req, res) => {
+  try {
+    const { userId } = req.params; // reporter
+    const { messageId, reason } = req.body;
+
+    if (!messageId || !reason) {
+      return res.status(400).json({ message: "Message ID and reason are required." });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found." });
+    }
+
+    const report = new Report({
+      type: "message",
+      reportedBy: userId,
+      targetMessage: messageId,
+      reason,
+    });
+
+    await report.save();
+    res.status(201).json({ message: "Message reported successfully." });
+  } catch (error) {
+    console.error("Error reporting message:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
