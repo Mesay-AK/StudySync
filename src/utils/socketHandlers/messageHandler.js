@@ -1,10 +1,9 @@
 import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
-import { createAndSendNotification } from "./notificationHandlers.js"
+import { createAndSendNotification } from "./notificationHandlers.js";
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { usersOnline } from "./userHandlers.js";
-
 
 export const handleMessageEvents = (socket, io) => {
   socket.on("sendPrivateMessage", async ({ sender, roomId, content }) => {
@@ -73,5 +72,56 @@ export const handleMessageEvents = (socket, io) => {
     }
   });
 
+  socket.on("getRoomMessages", async ({ roomId, userId, page = 1, limit = 20 }) => {
+    try {
+      const room = await ChatRoom.findById(roomId);
+      if (!room) return socket.emit("error", { message: "Room not found." });
 
-}
+      const user = await User.findById(userId);
+      if (!user) return socket.emit("error", { message: "User not found." });
+
+      // Exclude messages from blocked users
+      const blockedUsers = user.blockedUsers;
+      const messages = await Message.find({
+        chatRoomId: roomId,
+        sender: { $nin: blockedUsers }, // Exclude messages from blocked users
+      })
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
+
+      socket.emit("roomMessages", messages);
+    } catch (err) {
+      console.error("getRoomMessages error:", err.message);
+      socket.emit("error", { message: "Failed to retrieve messages." });
+    }
+  });
+
+  socket.on("getDirectMessages", async ({ senderId, receiverId, page = 1, limit = 20 }) => {
+    try {
+      const sender = await User.findById(senderId);
+      const receiver = await User.findById(receiverId);
+      if (!sender || !receiver) return socket.emit("error", { message: "User not found." });
+
+      // Exclude messages from blocked users
+      const blockedUsers = sender.blockedUsers;
+
+      const messages = await DirectMessage.find({
+        $or: [
+          { sender: senderId, receiver: receiverId },
+          { sender: receiverId, receiver: senderId },
+        ],
+        sender: { $nin: blockedUsers }, // Exclude messages from blocked users
+      })
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
+
+      socket.emit("directMessages", messages);
+    } catch (err) {
+      console.error("getDirectMessages error:", err.message);
+      socket.emit("error", { message: "Failed to retrieve direct messages." });
+    }
+  });
+};
+
