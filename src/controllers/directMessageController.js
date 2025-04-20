@@ -75,28 +75,155 @@ export const uploadMedia = (req, res) => {
   });
 };
 
-export const searchMessages = async (req, res) => {
-  const { sender, receiver } = req.params;
-  const { searchTerm } = req.query;
+export const markAsSeen = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id; // assuming you use auth middleware
 
-  if (!searchTerm) return res.status(400).json({ error: "Missing searchTerm" });
+    const message = await DirectMessage.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Optional: only allow the receiver to mark as seen
+    if (message.receiver.toString() !== userId) {
+      return res.status(403).json({ message: "Unauthorized action" });
+    }
+
+    if (message.status !== 'read') {
+      message.status = 'read';
+      message.readAt = new Date(); // Optional: track when it was read
+      await message.save();
+    }
+
+    return res.status(200).json({ message: "Message marked as seen" });
+  } catch (error) {
+    console.error("Error marking message as seen:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+export const updateDirectMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { newContent } = req.body;
+    const userId = req.user.id; // Authenticated user's ID from middleware
+
+    const message = await DirectMessage.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: 'You are not allowed to edit this message' });
+    }
+
+    message.content = newContent;
+
+
+    await message.save();
+
+    return res.status(200).json({ message: 'Message updated', updatedMessage: message });
+  } catch (error) {
+    console.error('Error updating direct message:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+
+export const deleteDirectMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id; 
+    const message = await DirectMessage.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    if (
+      message.sender.toString() !== userId &&
+      message.receiver.toString() !== userId
+    ) {
+      return res.status(403).json({ message: 'Not authorized to delete this message' });
+    }
+
+    await message.deleteOne();
+
+    return res.status(200).json({ message: 'Message deleted for both users' });
+  } catch (error) {
+    console.error('Error deleting direct message:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const sendDirectMessage = async (req, res) => {
+  try {
+    const { receiverId, content = "", media = null, type = "text" } = req.body;
+    const senderId = req.user.id;
+
+    if (!receiverId || (!content && !media)) {
+      return res.status(400).json({ message: "Missing content or receiver" });
+    }
+
+    const newMessage = new DirectMessage({
+      sender: senderId,
+      receiver: receiverId,
+      content,
+      media,
+      type,
+      status: 'sent'
+    });
+
+    await newMessage.save();
+
+    // Optionally: emit this via socket.io
+    // io.to(receiverId).emit("newDirectMessage", newMessage);
+
+    return res.status(201).json({ message: "Message sent", data: newMessage });
+  } catch (error) {
+    console.error("Error sending direct message:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const markConversationAsSeen = async (req, res) => {
+  const { senderId } = req.params;
+  const receiverId = req.user.id;
 
   try {
-    const messages = await DirectMessage.find({
-      $and: [
-        {
-          $or: [
-            { sender, receiver },
-            { sender: receiver, receiver: sender },
-          ],
-        },
-        { content: { $regex: searchTerm, $options: "i" } },
-      ],
+    const updated = await DirectMessage.updateMany(
+      {
+        sender: senderId,
+        receiver: receiverId,
+        status: { $ne: 'read' }
+      },
+      { $set: { status: 'read', readAt: new Date() } }
+    );
+
+    res.status(200).json({ message: "Conversation marked as seen", updatedCount: updated.modifiedCount });
+  } catch (error) {
+    console.error("Error marking conversation as seen:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getUnreadMessages = async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const unread = await DirectMessage.find({
+      receiver: userId,
+      status: { $ne: 'read' }
     }).sort({ createdAt: -1 });
 
-    res.status(200).json(messages);
+    res.status(200).json(unread);
   } catch (error) {
-    console.error("Error searching messages:", error);
-    res.status(500).json({ error: "Search failed" });
+    console.error("Error fetching unread messages:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

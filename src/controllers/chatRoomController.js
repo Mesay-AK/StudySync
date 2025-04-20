@@ -169,11 +169,51 @@ export const searchRoomMessages = async (req, res) => {
   }
 };
 
+
+
+export const updateDMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { newContent } = req.body;
+    const userId = req.user.id; 
+    const Updatedmessage = await message.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    // Only the sender can edit their message
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: 'You are not allowed to edit this message' });
+    }
+
+    Updatedmessage.content = newContent;
+
+
+    await Updatedmessage.save();
+
+    return res.status(200).json({ message: 'Message updated', updatedMessage: message });
+  } catch (error) {
+    console.error('Error updating direct message:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
 export const deleteMessage = async (req, res) => {
   const { roomId, messageId } = req.params;
+  const { userId } = req.body;
 
   try {
+    if (userId !== message.sender) {
+      return res.status(403).json({ error: "You are not authorized to delete this message" });
+    }
+
+    const room = await ChatRoom.findById(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
     const message = await Message.findOneAndDelete({ _id: messageId, chatRoomId: roomId });
+    
     if (!message) {
       return res.status(404).json({ error: "Message not found" });
     }
@@ -232,7 +272,7 @@ export const reportUser = async (req, res) => {
 
 
 
-const reportMessage = async (req, res) => {
+export const reportMessage = async (req, res) => {
   try {
     const { userId } = req.params; // reporter
     const { messageId, reason } = req.body;
