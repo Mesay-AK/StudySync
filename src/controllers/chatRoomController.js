@@ -123,19 +123,32 @@ export const sendMessageToRoom = async (req, res) => {
 
 export const getRoomMessages = async (req, res) => {
   const { roomId } = req.params;
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 20, userId } = req.query;
 
   try {
-    const messages = await Message.find({ chatRoomId: roomId })
+    const room = await ChatRoom.findById(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const blockedUserIds = user.blockedUsers.map(id => id.toString());
+
+    const messages = await Message.find({
+      chatRoomId: roomId,
+      sender: { $nin: blockedUserIds }, 
+    })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
 
     res.status(200).json(messages);
   } catch (error) {
+    console.error("getRoomMessages error:", error);
     res.status(500).json({ error: "Error fetching messages" });
   }
 };
+
 
 export const searchRoomMessages = async (req, res) => {
   const { roomId } = req.params;
