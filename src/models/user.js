@@ -11,7 +11,6 @@ const userSchema = Schema(
     profilePicture: { type: String, default: "" },
     bio: { type: String, default: "" },
     onlineStatus: { type: String, enum: ["online", "offline"],default: "offline"},
-    role: { type: String, enum: ["user", "admin"], default: "user" },
     lastSeen: { type: Date, default: null },
     resetToken: { type: String, default: "" },
     resetPasswordExpires: Date,
@@ -19,6 +18,11 @@ const userSchema = Schema(
     blockedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
     unreadMessages: { type: Number, default: 0 },
     isAdmin: { type: Boolean, default: false }, 
+    settings: {
+      darkMode: { type: Boolean, default: false },
+      language: { type: String, default: "en" },
+    }
+
   },
   { timestamps: true }
 );

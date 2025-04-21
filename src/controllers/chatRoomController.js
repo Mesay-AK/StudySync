@@ -5,7 +5,13 @@ import Report from "../models/Report.js";
 
 export const getAllPublicRooms = async (req, res) => {
   try {
-    const rooms = await ChatRoom.find({ type: "public" }).select("-invitedUsers"); // Hide invitedUsers for public rooms
+    const rooms = await ChatRoom.find({ type: "public" }).select("-invitedUsers"); 
+
+    if (!rooms || rooms.length === 0) {
+      console.log("No public rooms found");
+      return res.status(404).json({ error: "No public rooms found" });
+    }
+
     res.status(200).json(rooms);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch rooms" });
@@ -16,12 +22,12 @@ export const createRoom = async (req, res) => {
   const { name, type, creatorId, subject } = req.body;
 
   try {
-    // Ensure creator is part of the new room
     const newRoom = new ChatRoom({
       name,
       type,
       members: [creatorId],
-      subject, // Added subject to categorize rooms
+      admins: [creatorId],
+      subject, 
     });
 
     const savedRoom = await newRoom.save();
@@ -39,11 +45,13 @@ export const joinPublicRoom = async (req, res) => {
   try {
     const room = await ChatRoom.findById(roomId);
     if (!room || room.type !== "public") {
+      console.log("Public room not found or invalid type");
       return res.status(404).json({ error: "Public room not found" });
     }
 
     // Avoid duplicate entry
     if (!room.members.includes(userId)) {
+      console.log("User not already a member, adding to room");
       room.members.push(userId);
       await room.save();
     }
@@ -63,10 +71,12 @@ export const joinPrivateRoom = async (req, res) => {
   try {
     const room = await ChatRoom.findById(roomId);
     if (!room || room.type !== "private" || !room.invitedUsers.includes(userId)) {
+      console.log("Not invited or invalid room");
       return res.status(403).json({ error: "Not invited or invalid room" });
     }
 
     if (!room.members.includes(userId)) {
+      console.log("User not already a member, adding to room");
       room.members.push(userId);
       await room.save();
     }
@@ -83,8 +93,10 @@ export const inviteUsers = async (req, res) => {
 
   try {
     const room = await ChatRoom.findById(roomId);
-    if (!room) return res.status(404).json({ error: "Room not found" });
-
+    if (!room) {
+      console.log("Room not found");
+      return res.status(404).json({ error: "Room not found" });
+}
     // Add only new invitees (avoid duplicates)
     const newInvites = userIds.filter((id) => !room.invitedUsers.includes(id));
     room.invitedUsers.push(...newInvites);
@@ -179,11 +191,12 @@ export const updateDMessage = async (req, res) => {
     const Updatedmessage = await message.findById(messageId);
 
     if (!message) {
+      console.log("Message not found");
       return res.status(404).json({ message: 'Message not found' });
     }
 
-    // Only the sender can edit their message
     if (message.sender.toString() !== userId) {
+      console.log("User not authorized to edit this message");
       return res.status(403).json({ message: 'You are not allowed to edit this message' });
     }
 
@@ -206,15 +219,19 @@ export const deleteMessage = async (req, res) => {
 
   try {
     if (userId !== message.sender) {
+      console.log("User not authorized to delete this message");
       return res.status(403).json({ error: "You are not authorized to delete this message" });
     }
 
     const room = await ChatRoom.findById(roomId);
-    if (!room) return res.status(404).json({ error: "Room not found" });
-
+    if (!room) {
+      console.log("Room not found");
+      return res.status(404).json({ error: "Room not found" });
+}
     const message = await Message.findOneAndDelete({ _id: messageId, chatRoomId: roomId });
     
     if (!message) {
+      console.log("Message not found");
       return res.status(404).json({ error: "Message not found" });
     }
 
@@ -230,6 +247,7 @@ export const deleteRoom = async (req, res) => {
   try {
     const room = await ChatRoom.findByIdAndDelete(roomId);
     if (!room) {
+      console.log("Room not found");
       return res.status(404).json({ error: "Room not found" });
     }
 
@@ -266,11 +284,13 @@ export const reportUser = async (req, res) => {
     const { targetUserId, reason } = req.body;
 
     if (!targetUserId || !reason) {
+      console.log("Target user and reason are required.");
       return res.status(400).json({ message: "Target user and reason are required." });
     }
 
     const reportedUser = await User.findById(targetUserId);
     if (!reportedUser) {
+      console.log("User to report not found.");
       return res.status(404).json({ message: "User to report not found." });
     }
 
@@ -293,15 +313,17 @@ export const reportUser = async (req, res) => {
 
 export const reportMessage = async (req, res) => {
   try {
-    const { userId } = req.params; // reporter
+    const { userId } = req.params; 
     const { messageId, reason } = req.body;
 
     if (!messageId || !reason) {
+      console.log("Message ID and reason are required.");
       return res.status(400).json({ message: "Message ID and reason are required." });
     }
 
     const message = await Message.findById(messageId);
     if (!message) {
+      console.log("Message not found.");
       return res.status(404).json({ message: "Message not found." });
     }
 

@@ -1,5 +1,6 @@
 import express from "express";
 import {
+    registerAdmin,
     viewReports,
     resolveReport,
     deleteUser,
@@ -7,12 +8,13 @@ import {
     promoteToRoomAdmin,
     demoteFromRoomAdmin, 
 } from "../controllers/adminController.js";
-import { isAdmin } from "../middleware/adminMiddleware.js";
+import { checkRoomAdmin } from "../middleware/adminMiddleware.js";
 import { authenticate, validateUser } from "../middleware/authMiddleware.js";
 
 const adminRouter = express.Router();
-adminRouter.use(authenticate, validateUser, isAdmin);
+adminRouter.use(authenticate, validateUser,  checkRoomAdmin);
 
+adminRouter.post("/adRegister", registerAdmin);
 adminRouter.get("/reports", viewReports);
 adminRouter.post("/resolve-report", resolveReport);
 adminRouter.post("/delete-user", deleteUser);

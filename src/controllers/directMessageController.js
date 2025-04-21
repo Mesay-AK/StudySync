@@ -6,6 +6,7 @@ export const getDirectMessages = async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
 
   if (!isValidObjectId(senderId) || !isValidObjectId(receiverId)) {
+    console.error("Invalid sender or receiver ID:", senderId, receiverId);
     return res.status(400).json({ error: "Invalid sender or receiver ID" });
   }
 
@@ -83,10 +84,10 @@ export const markAsSeen = async (req, res) => {
     const message = await DirectMessage.findById(messageId);
 
     if (!message) {
+      console.error("Message not found:", messageId);
       return res.status(404).json({ message: "Message not found" });
     }
 
-    // Optional: only allow the receiver to mark as seen
     if (message.receiver.toString() !== userId) {
       return res.status(403).json({ message: "Unauthorized action" });
     }
@@ -109,15 +110,17 @@ export const updateDirectMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
     const { newContent } = req.body;
-    const userId = req.user.id; // Authenticated user's ID from middleware
+    const userId = req.user.id; 
 
     const message = await DirectMessage.findById(messageId);
 
     if (!message) {
+      console.error("Message not found:", messageId);
       return res.status(404).json({ message: 'Message not found' });
     }
 
     if (message.sender.toString() !== userId) {
+      console.error("User not authorized to edit this message:", userId);
       return res.status(403).json({ message: 'You are not allowed to edit this message' });
     }
 
@@ -142,6 +145,7 @@ export const deleteDirectMessage = async (req, res) => {
     const message = await DirectMessage.findById(messageId);
 
     if (!message) {
+      console.error("Message not found:", messageId);
       return res.status(404).json({ message: 'Message not found' });
     }
 
@@ -149,6 +153,7 @@ export const deleteDirectMessage = async (req, res) => {
       message.sender.toString() !== userId &&
       message.receiver.toString() !== userId
     ) {
+      console.error("User not authorized to delete this message:", userId);
       return res.status(403).json({ message: 'Not authorized to delete this message' });
     }
 
@@ -167,6 +172,7 @@ export const sendDirectMessage = async (req, res) => {
     const senderId = req.user.id;
 
     if (!receiverId || (!content && !media)) {
+      console.error("Missing content or receiver:", content, receiverId);
       return res.status(400).json({ message: "Missing content or receiver" });
     }
 
@@ -180,9 +186,6 @@ export const sendDirectMessage = async (req, res) => {
     });
 
     await newMessage.save();
-
-    // Optionally: emit this via socket.io
-    // io.to(receiverId).emit("newDirectMessage", newMessage);
 
     return res.status(201).json({ message: "Message sent", data: newMessage });
   } catch (error) {

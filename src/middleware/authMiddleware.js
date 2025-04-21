@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import { verifyAccessToken } from '../utils/Tokens/jwtTokens.js';
 
 export const authenticate = async (req, res, next) => {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
@@ -6,7 +7,7 @@ export const authenticate = async (req, res, next) => {
   if (!token) return res.status(401).json({ message: "Access token missing" });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = verifyAccessToken(token);
     const user = await User.findById(decoded.userId);
 
     if (!user) return res.status(401).json({ message: "User not found" });
@@ -27,15 +28,19 @@ export const authorizeRoles = (...roles) => {
   };
 };
 
+
+
 export const checkOwnershipOrAdmin = (paramName = "userId") => {
   return (req, res, next) => {
     const targetUserId = req.params[paramName] || req.body[paramName];
     if (req.user._id.toString() === targetUserId || req.user.isAdmin) {
       return next();
     }
+    
     return res.status(403).json({ message: "Forbidden: Not owner or admin" });
   };
 };
+
 
 
 export const validateUser = (req, res, next) => {

@@ -6,6 +6,7 @@ import connectDB from './config/db.js';
 import passport from 'passport';
 import morgan from 'morgan';
 import path from 'path';
+import cookieParser from 'cookie-parser';
 
 
 import authRouter from './routes/authRoutes.js';
@@ -25,6 +26,7 @@ const server = http.createServer(app);
 setupSocket(server);
 
 app.use(express.json());
+app.use(cookieParser());
 app.use(cors());
 app.use(morgan('dev'));  
 app.use(express.urlencoded({ extended: true })); 
@@ -43,4 +45,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT} 🚀`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
