@@ -127,7 +127,8 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-// Promote user to room admin
+
+
 export const promoteToRoomAdmin = async (req, res) => {
   const { roomId, userId } = req.body;
 
