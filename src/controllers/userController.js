@@ -17,7 +17,6 @@ export const getUserProfile = async (req, res) => {
 };
 
 
-
 export const updateUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -58,7 +57,6 @@ export const updateUserProfile = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 
 
@@ -188,6 +186,59 @@ export const unblockUser = async (req, res) => {
     res.status(200).json({ message: "User unblocked successfully", blockedUsers: user.blockedUsers });
   } catch (error) {
     console.error("Error unblocking user:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+
+export const searchUsers = async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) return res.status(400).json({ message: "Query is required" });
+
+    const users = await User.find({
+      $or: [
+        { username: { $regex: query, $options: "i" } },
+        { displayName: { $regex: query, $options: "i" } },
+        { email: { $regex: query, $options: "i" } }
+
+      ]
+    }).select("-password");
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error searching users:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getUserSettings = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId).select("settings");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.status(200).json(user.settings);
+  }
+  catch (error) {
+    console.error("Error fetching user settings:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export const updateUserSettings = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { settings } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.settings = { ...user.settings, ...settings };
+    await user.save();
+
+    res.status(200).json(user.settings);
+  }catch (error) {
+    console.error("Error updating user settings:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 }
