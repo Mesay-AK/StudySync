@@ -2,15 +2,19 @@ import express from "express";
 import {
   getUserProfile,
   updateUserProfile,
-  deleteProfile,
   getUserStatus,
   updateUserStatus,
+  deleteProfile,
   getAllUsers,
-  blockUser,
   getBlockedUsers,
+  blockUser,
   unblockUser,
+  searchUsers,
+  getUserSettings,
+  updateUserSettings,
 
-} from "../controllers/userController.js";
+} from "../controllers/adminController.js";
+
 
 import {authenticate,
       authorizeRoles, 
@@ -33,5 +37,8 @@ userRouter.post("/block", authenticate, checkOwnershipOrAdmin, blockUser);
 userRouter.get("/admin/all-users", authenticate, authorizeRoles("admin"), getAllUsers);
 userRouter.get("/blocked/:userId", authenticate, checkOwnershipOrAdmin, getBlockedUsers);
 userRouter.patch("/unblock/:userId", authenticate, checkOwnershipOrAdmin, unblockUser);
+userRouter.get("/search", authenticate, searchUsers);
+userRouter.get("/settings/:userId", authenticate, getUserSettings);
+userRouter.patch("/settings/:userId", authenticate, checkOwnershipOrAdmin, updateUserSettings);
 
 export default userRouter;
