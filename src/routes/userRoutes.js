@@ -1,20 +1,19 @@
 import express from "express";
-import {
-  getUserProfile,
-  updateUserProfile,
-  getUserStatus,
-  updateUserStatus,
-  deleteProfile,
-  getAllUsers,
-  getBlockedUsers,
-  blockUser,
-  unblockUser,
-  searchUsers,
-  getUserSettings,
-  updateUserSettings,
 
-} from "../controllers/adminController.js";
-
+import { blockUser,
+         deleteProfile,
+         unblockUser,
+         getAllUsers,
+         getBlockedUsers,
+         searchUsers,
+         getUserSettings,
+         updateUserSettings,
+         getUserProfile,
+         updateUserProfile,
+         getUserStatus,
+         updateUserStatus,
+         
+} from "../controllers/userController.js";
 
 import {authenticate,
       authorizeRoles, 
