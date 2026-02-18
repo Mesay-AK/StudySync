@@ -27,7 +27,7 @@ setupSocket(server);
 
 app.use(express.json());
 app.use(cookieParser());
-app.use(cors());
+app.use(cors(*));
 app.use(morgan('dev'));  
 app.use(express.urlencoded({ extended: true })); 
 app.use(passport.initialize());  
