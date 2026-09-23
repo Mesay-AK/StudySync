@@ -3,47 +3,36 @@ import User from "../models/User.js";
 // import Message from "../models/Message.js";
 import Report from "../models/Report.js";
 import ChatRoom from "../models/ChatRoom.js";
-import { hashPassword } from '../utils/passwordHelpers/password-helper.js';
-
-
-
+import { hashPassword, isStrongPassword } from '../utils/passwordHelpers/password-helper.js';
 
 
 export const registerAdmin = async (req, res) => {
   try {
     const { username, email, password, displayName } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
-      console.log('Email already in use:', email);
-      return res.status(400).json({ message: 'Email already in use' });
+      const field = existingUser.email === email ? 'Email' : 'Username';
+      return res.status(400).json({ message: `${field} already in use` });
     }
 
-  
-    const passwordStrength = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()_+])[A-Za-z\d!@#$%^&*()_+]{8,}$/;
-    if (!passwordStrength.test(password)) {
-      console.log('Password is too weak:', password);
-      return res.status(400).json({ message: 'Password is too weak' });
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.' });
     }
 
-    const hashedPassword = await hashPassword(password);
-    if (!hashedPassword) {
-      console.log('Error hashing password');
-      return res.status(500).json({ message: 'Error hashing password' });   
-    }
     const newUser = new User({
       username,
       email,
-      password: hashedPassword,
+      password: await hashPassword(password),
       displayName: displayName || username,
       isAdmin: true,
     });
 
     await newUser.save();
 
-    return res.status(201).json({ message: 'User registered successfully.' });
+    return res.status(201).json({ message: 'Admin registered successfully.' });
   } catch (error) {
-    console.error('Error registering user:', error);
+    console.error('Error registering admin:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -51,14 +40,10 @@ export const registerAdmin = async (req, res) => {
 export const viewReports = async (req, res) => {
   try {
     const reports = await Report.find()
-      .populate("reporter", "username email")
-      .populate("reportedUser", "username email")
-      .populate("reportedMessage");
-
-    if (!reports || reports.length === 0) {
-      console.log("No reports found");
-      return res.status(404).json({ success: false, message: "No reports found" });
-    }
+      .populate("reportedBy", "username email")
+      .populate("targetUser", "username email")
+      .populate("targetMessage")
+      .sort({ createdAt: -1 });
 
     res.status(200).json({ success: true, reports });
   } catch (err) {
@@ -71,19 +56,18 @@ export const resolveReport = async (req, res) => {
   const { reportId, action } = req.body;
 
   try {
-    const report = await Report.findById(reportId).populate("reportedMessage");
+    const report = await Report.findById(reportId).populate("targetMessage");
     if (!report) {
       console.log("Report not found");
       return res.status(404).json({ success: false, message: "Report not found" });}
 
-    if (action === "deleteMessage" && report.reportedMessage) {
-
-      report.reportedMessage.isDeleted = true;
-      await report.reportedMessage.save();
+    if (action === "deleteMessage" && report.targetMessage) {
+      report.targetMessage.isDeleted = true;
+      await report.targetMessage.save();
     }
 
-    if (action === "banUser" && report.reportedUser) {
-      await User.findByIdAndUpdate(report.reportedUser._id, { isBanned: true });
+    if (action === "banUser" && report.targetUser) {
+      await User.findByIdAndUpdate(report.targetUser, { isBanned: true });
     }
 
     report.status = "reviewed";
@@ -91,6 +75,7 @@ export const resolveReport = async (req, res) => {
 
     res.status(200).json({ success: true, message: "Report resolved" });
   } catch (err) {
+    console.error("Error resolving report:", err);
     res.status(500).json({ success: false, message: "Error resolving report" });
   }
 };
@@ -131,20 +116,13 @@ export const deleteUser = async (req, res) => {
 
 
 
+// req.room is populated by the checkRoomAdmin middleware, which already
+// verified the caller is an admin of this room - no need to re-check here.
 export const promoteToRoomAdmin = async (req, res) => {
-  const { roomId, userId } = req.body;
+  const { userId } = req.body;
+  const room = req.room;
 
-  const room = await ChatRoom.findById(roomId);
-  if (!room) {
-    console.log("Room not found");
-    return res.status(404).json({ message: "Room not found" });}
-
-  if (!room.admins.includes(req.user._id)) {
-    console.log("User is not a room admin");
-    return res.status(403).json({ message: "You are not a room admin" });
-  }
-
-  if (room.admins.includes(userId)) {
+  if (room.admins.some(adminId => adminId.toString() === userId)) {
     console.log("User is already an admin");
     return res.status(400).json({ message: "User is already an admin" });
   }
@@ -156,17 +134,8 @@ export const promoteToRoomAdmin = async (req, res) => {
 };
 
 export const demoteFromRoomAdmin = async (req, res) => {
-  const { roomId, userId } = req.body;
-
-  const room = await ChatRoom.findById(roomId);
-  if (!room) {
-    console.log("Room not found");
-    return res.status(404).json({ message: "Room not found" });}
-
-  if (!room.admins.includes(req.user._id)) {
-    console.log("User is not a room admin");
-    return res.status(403).json({ message: "You are not a room admin" });
-  }
+  const { userId } = req.body;
+  const room = req.room;
 
   room.admins = room.admins.filter(adminId => adminId.toString() !== userId);
   await room.save();

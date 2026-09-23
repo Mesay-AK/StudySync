@@ -9,19 +9,19 @@ import {
     demoteFromRoomAdmin, 
 } from "../controllers/adminController.js";
 import { checkRoomAdmin } from "../middleware/adminMiddleware.js";
-import { authenticate, validateUser } from "../middleware/authMiddleware.js";
+import { authenticate, requireAdmin } from "../middleware/authMiddleware.js";
 
 const adminRouter = express.Router();
-adminRouter.use(authenticate, validateUser,  checkRoomAdmin);
 
-adminRouter.post("/adRegister", registerAdmin);
-adminRouter.get("/reports", viewReports);
-adminRouter.post("/resolve-report", resolveReport);
-adminRouter.post("/delete-user", deleteUser);
-adminRouter.post("/toggle-user", toggleBanUser);
-adminRouter.patch("/promote", promoteToRoomAdmin);
-adminRouter.patch("/demote", demoteFromRoomAdmin);
-adminRouter.post("/promote", promoteToRoomAdmin);
-adminRouter.post("/demote", demoteFromRoomAdmin);
+// Site-wide admin actions: gated on the caller's own isAdmin flag.
+adminRouter.post("/adRegister", authenticate, requireAdmin, registerAdmin);
+adminRouter.get("/reports", authenticate, requireAdmin, viewReports);
+adminRouter.post("/resolve-report", authenticate, requireAdmin, resolveReport);
+adminRouter.post("/delete-user", authenticate, requireAdmin, deleteUser);
+adminRouter.post("/toggle-user", authenticate, requireAdmin, toggleBanUser);
+
+// Room-scoped admin actions: gated on being an admin of that specific room.
+adminRouter.patch("/promote", authenticate, checkRoomAdmin, promoteToRoomAdmin);
+adminRouter.patch("/demote", authenticate, checkRoomAdmin, demoteFromRoomAdmin);
 
 export default adminRouter;

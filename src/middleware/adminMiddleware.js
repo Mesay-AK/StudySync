@@ -1,7 +1,7 @@
 import ChatRoom from "../models/ChatRoom.js";
 
 export const checkRoomAdmin = async (req, res, next) => {
-  const userId = req.userId; 
+  const userId = req.user?._id?.toString();
   const roomId = req.params.roomId || req.body.roomId;
 
   if (!roomId) {
@@ -15,9 +15,9 @@ export const checkRoomAdmin = async (req, res, next) => {
       return res.status(404).json({ message: "Chat room not found." });
     }
 
-    const isAdmin = room.admins.some(adminId => adminId.toString() === userId);
+    const isRoomAdmin = room.admins.some(adminId => adminId.toString() === userId);
 
-    if (!isAdmin) {
+    if (!isRoomAdmin && !req.user.isAdmin) {
       return res.status(403).json({ message: "You are not an admin of this room." });
     }
 
