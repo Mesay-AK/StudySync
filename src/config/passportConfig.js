@@ -1,5 +1,5 @@
 import passport from 'passport';
-import { OAuth2Strategy as GoogleStrategy } from 'passport-google-oauth';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import User from '../models/User.js';
 
 passport.use(
@@ -13,22 +13,22 @@ passport.use(
       try {
         const { email, name, picture } = profile._json;
 
-        // Check if user already exists
         let user = await User.findOne({ email });
 
         if (!user) {
-          // If not, create a new user
-          user = new User({
-            username: name,
+          let username = email.split('@')[0];
+          if (await User.findOne({ username })) {
+            username = `${username}-${profile.id.slice(-6)}`;
+          }
+
+          user = await User.create({
+            username,
             email,
             displayName: name,
             profilePicture: picture,
-            status: true,  // or any default status you want
           });
-          await user.save();
         }
 
-        // Return user
         return done(null, user);
       } catch (error) {
         return done(error, false);

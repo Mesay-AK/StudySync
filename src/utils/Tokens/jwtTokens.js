@@ -1,14 +1,18 @@
 // utils/Tokens/tokenHelper.js
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import redisClient from '../../config/redisClient.js';
 import { v4 as uuidv4 } from 'uuid';
+
+const ACCESS_TOKEN_EXPIRY = Number(process.env.JWT_ACCESS_TOKEN_EXPIRY) || 900;
+const REFRESH_TOKEN_EXPIRY = Number(process.env.JWT_REFRESH_TOKEN_EXPIRY) || 604800;
 
 export const generateAccessToken = (payload) => {
   const sessionId = uuidv4();
   const accessToken = jwt.sign(
     { ...payload, sessionId },
     process.env.JWT_SECRET,
-    { expiresIn: '1h', algorithm: 'HS256' }
+    { expiresIn: ACCESS_TOKEN_EXPIRY, algorithm: 'HS256' }
   );
   return accessToken;
 };
@@ -18,11 +22,11 @@ export const generateRefreshToken = async (payload) => {
   const refreshToken = jwt.sign(
     { ...payload, sessionId },
     process.env.JWT_REFRESH_SECRET,
-    { expiresIn: '7d', algorithm: 'HS256' }
+    { expiresIn: REFRESH_TOKEN_EXPIRY, algorithm: 'HS256' }
   );
 
   try {
-    await redisClient.set(`refreshToken:${sessionId}`, refreshToken, 'EX', 7 * 24 * 60 * 60);
+    await redisClient.set(`refreshToken:${sessionId}`, refreshToken, 'EX', REFRESH_TOKEN_EXPIRY);
   } catch (error) {
     console.error('Error storing refresh token in Redis:', error);
   }
@@ -30,13 +34,12 @@ export const generateRefreshToken = async (payload) => {
   return refreshToken;
 };
 
-export const verifyAccessToken = async (token) => {
+// Synchronous by design (jwt.verify is sync) - callers must NOT await-forget this.
+export const verifyAccessToken = (token) => {
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
-    return payload;
+    return jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
   } catch (error) {
     throw new Error(`Invalid or expired token: ${error.message}`);
-
   }
 };
 
@@ -66,4 +69,4 @@ export const deleteRefreshToken = async (sessionId) => {
 
 export const generatePasswordResetToken = () => {
   return crypto.randomBytes(32).toString('hex');
-}
+};
