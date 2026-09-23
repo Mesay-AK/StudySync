@@ -3,9 +3,11 @@ const { Schema, model } = mongoose;
 
 const ChatRoomSchema = new Schema({
   name: { type: String, required: true },
-  subject: { type: String }, 
-  tags: [{ type: String }], 
+  description: { type: String, default: "" },
+  subject: { type: String },
+  tags: [{ type: String }],
   type: { type: String, enum: ["public", "private"], default: "public" },
+  maxParticipants: { type: Number, default: 50 },
   members: [{ type: Schema.Types.ObjectId, ref: "User" }],
   invitedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
   admins: [{ type: Schema.Types.ObjectId, ref: "User" }],

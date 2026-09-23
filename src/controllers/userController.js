@@ -126,10 +126,11 @@ export const getAllUsers = async (req, res) => {
 
 export const blockUser = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.id;
     const { targetUserId } = req.body;
 
     if (!targetUserId) return res.status(400).json({ message: "Target user ID is required" });
+    if (targetUserId === userId) return res.status(400).json({ message: "You cannot block yourself" });
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -245,14 +246,3 @@ export const updateUserSettings = async (req, res) => {
 }
 
 
-export const getUserFriends = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const user = await User.findById(userId).populate("friends", "-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.status(200).json(user.friends);
-  } catch (error) {
-    console.error("Error fetching user friends:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-} 

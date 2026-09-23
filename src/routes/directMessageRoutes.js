@@ -1,4 +1,5 @@
-import {   
+import {
+        getConversations,
         getDirectMessages,
         searchDirectMessages,
         uploadMedia,
@@ -7,23 +8,29 @@ import {
         updateDirectMessage,
         deleteDirectMessage,
         sendDirectMessage,
-        getUnreadMessages
+        getUnreadMessages,
+        reportDirectMessage,
  } from "../controllers/directMessageController.js";
 import express from "express";
 import { uploads } from "../middleware/mediaMiddleware.js"
+import { authenticate } from "../middleware/authMiddleware.js"
 
 const directMessageRouter = express.Router();
 
+directMessageRouter.use(authenticate);
+
 directMessageRouter.post("/send", sendDirectMessage);
-directMessageRouter.patch('/direct-messages/:messageId/seen', markAsSeen);
-directMessageRouter.patch("/update/:messageId", updateDirectMessage);
-directMessageRouter.delete("/delete/:messageId", deleteDirectMessage);
+directMessageRouter.get("/conversations", getConversations);
 directMessageRouter.get("/unread", getUnreadMessages);
-directMessageRouter.post("/upload",uploads, uploadMedia);
-directMessageRouter.get('/direct/:senderId/:receiverId', getDirectMessages);
-directMessageRouter.get('/direct/:senderId/:receiverId/search', searchDirectMessages);
-directMessageRouter.patch("/seen/conversation/:senderId", markConversationAsSeen);
+directMessageRouter.post("/upload", uploads, uploadMedia);
+directMessageRouter.post("/report", reportDirectMessage);
 
+directMessageRouter.patch("/:messageId/seen", markAsSeen);
+directMessageRouter.patch("/:messageId", updateDirectMessage);
+directMessageRouter.delete("/:messageId", deleteDirectMessage);
 
+directMessageRouter.get('/conversation/:senderId/:receiverId', getDirectMessages);
+directMessageRouter.get('/conversation/:senderId/:receiverId/search', searchDirectMessages);
+directMessageRouter.patch("/conversation/:senderId/seen", markConversationAsSeen);
 
 export default directMessageRouter;
