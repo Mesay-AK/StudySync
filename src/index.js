@@ -21,6 +21,7 @@ import materialRouter from './routes/materialRoutes.js';
 import activityRouter from './routes/activityRoutes.js';
 import analyticsRouter from './routes/analyticsRoutes.js';
 import announcementRouter from './routes/announcementRoutes.js';
+import contactRouter from './routes/contactRoutes.js';
 import setupSocket from './config/socket.js';
 
 dotenv.config();
@@ -63,6 +64,7 @@ app.use('/api/materials', materialRouter);
 app.use('/api/activity', activityRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/announcements', announcementRouter);
+app.use('/api/contact', contactRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');
@@ -78,5 +80,5 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
