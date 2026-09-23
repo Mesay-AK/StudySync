@@ -6,21 +6,16 @@ import User from "../../models/User.js";
 
 /**
  * Handles all socket events related to direct messaging.
- * @param {Socket} socket - The connected socket instance.
+ * @param {Socket} socket - The connected, authenticated socket instance.
  * @param {Server} io - The Socket.IO server instance.
  */
 const handleDirectMessages = (socket, io) => {
-  socket.on("sendDirectMessage", async ({ sender, receiver, content }) => {
-    try {
-      if (!sender || !receiver || !content?.trim()) {
-        return socket.emit("error", { message: "Invalid message data." });
-      }
+  const sender = socket.userId;
 
-      const senderUser = await User.findById(sender);
-      if (!senderUser || senderUser.isBanned) {
-        return socket.emit("banned", {
-          message: "You are currently banned. Please contact support.",
-        });
+  socket.on("sendDirectMessage", async ({ receiver, content, media }) => {
+    try {
+      if (!receiver || (!content?.trim() && !media)) {
+        return socket.emit("error", { message: "Invalid message data." });
       }
 
       const receiverUser = await User.findById(receiver);
@@ -31,13 +26,17 @@ const handleDirectMessages = (socket, io) => {
       const messageData = {
         sender,
         receiver,
-        content,
+        content: content || "",
         status: "sent",
       };
+      if (media) {
+        messageData.media = media;
+        messageData.type = media.type || "file";
+      }
 
       // Extract emojis if any
       const regex = emojiRegex();
-      const emojis = [...content.matchAll(regex)].map(match => match[0]);
+      const emojis = content ? [...content.matchAll(regex)].map(match => match[0]) : [];
       if (emojis.length > 0) messageData.emojis = emojis;
 
       const newMessage = new DirectMessage(messageData);
@@ -75,11 +74,12 @@ const handleDirectMessages = (socket, io) => {
     try {
       const message = await DirectMessage.findById(messageId);
       if (!message || message.status === "read") return;
+      if (message.receiver.toString() !== sender) return;
 
       message.status = "read";
       await message.save();
 
-      const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === message.sender)?.[0];
+      const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === message.sender.toString())?.[0];
       if (senderSocketId) {
         io.to(senderSocketId).emit("messageRead", { messageId });
       }

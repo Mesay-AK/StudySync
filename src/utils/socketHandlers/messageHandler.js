@@ -1,39 +1,29 @@
 import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
+import DirectMessage from "../../models/DirectMessage.js";
 import { createAndSendNotification } from "./notificationHandlers.js";
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { usersOnline } from "./userHandlers.js";
 
 export const handleMessages = (socket, io) => {
-  socket.on("sendPrivateMessage", async ({ sender, roomId, content }) => {
+  const sender = socket.userId;
+
+  socket.on("sendPrivateMessage", async ({ roomId, content }) => {
     try {
-      if (!sender || !roomId || !content?.trim()) {
+      if (!roomId || !content?.trim()) {
         return socket.emit("error", { message: "Invalid message data." });
       }
 
       const room = await ChatRoom.findById(roomId);
       if (!room || room.isDeleted) return;
 
-      const senderUser = await User.findById(sender);
-      if (!senderUser || senderUser.isBanned) {
-        return socket.emit("banned", {
-          message: "You are currently banned. Please contact support.",
-        });
+      if (!room.members.some((memberId) => memberId.toString() === sender)) {
+        return socket.emit("error", { message: "You are not a member of this room." });
       }
 
-      // Extract emojis if any
       const emojiMatches = [...content.matchAll(emojiRegex())].map(match => match[0]);
 
-      // Filter out members who have blocked the sender
-      const validMembers = room.members.filter(async (memberId) => {
-        const member = await User.findById(memberId);
-        return !member.blockedUsers.includes(sender); // Exclude blocked members
-      });
-
-      if (validMembers.length === 0) return; // If no valid members to send to
-
-      // Create the message object
       const newMessage = new Message({
         sender,
         chatRoomId: roomId,
@@ -42,29 +32,28 @@ export const handleMessages = (socket, io) => {
         emojis: emojiMatches,
       });
 
-      // Save the message
       await newMessage.save();
 
-      // Notify all valid members (those who haven't blocked the sender)
+      // Notify all members who haven't blocked the sender.
       for (const memberId of room.members) {
-        const memberUser = await User.findById(memberId);
-        if (!memberUser?.blockedUsers.includes(sender)) {
-          // Check if the member is online and send the message
-          const socketId = [...usersOnline.entries()].find(([, id]) => id === memberId.toString())?.[0];
-          if (socketId) {
-            io.to(socketId).emit("receiveMessage", newMessage);
-          }
+        if (memberId.toString() === sender) continue;
 
-          // Send notification if the user hasn't blocked the sender
-          await createAndSendNotification({
-            io,
-            type: "room_message",
-            recipientId: memberId.toString(),
-            senderId: sender,
-            content,
-            metadata: { roomId },
-          });
+        const memberUser = await User.findById(memberId);
+        if (memberUser?.blockedUsers.includes(sender)) continue;
+
+        const socketId = [...usersOnline.entries()].find(([, id]) => id === memberId.toString())?.[0];
+        if (socketId) {
+          io.to(socketId).emit("receiveMessage", newMessage);
         }
+
+        await createAndSendNotification({
+          io,
+          type: "room_message",
+          recipientId: memberId.toString(),
+          senderId: sender,
+          content,
+          metadata: { roomId },
+        });
       }
     } catch (err) {
       console.error("sendPrivateMessage error:", err.message);
@@ -72,19 +61,20 @@ export const handleMessages = (socket, io) => {
     }
   });
 
-  socket.on("getRoomMessages", async ({ roomId, userId, page = 1, limit = 20 }) => {
+  socket.on("getRoomMessages", async ({ roomId, page = 1, limit = 20 }) => {
     try {
       const room = await ChatRoom.findById(roomId);
       if (!room) return socket.emit("error", { message: "Room not found." });
+      if (!room.members.some((memberId) => memberId.toString() === sender)) {
+        return socket.emit("error", { message: "You are not a member of this room." });
+      }
 
-      const user = await User.findById(userId);
-      if (!user) return socket.emit("error", { message: "User not found." });
-
-      // Exclude messages from blocked users
+      const user = await User.findById(sender);
       const blockedUsers = user.blockedUsers;
       const messages = await Message.find({
         chatRoomId: roomId,
-        sender: { $nin: blockedUsers }, // Exclude messages from blocked users
+        sender: { $nin: blockedUsers },
+        isDeleted: false,
       })
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -97,21 +87,21 @@ export const handleMessages = (socket, io) => {
     }
   });
 
-  socket.on("getDirectMessages", async ({ senderId, receiverId, page = 1, limit = 20 }) => {
+  socket.on("getDirectMessages", async ({ receiverId, page = 1, limit = 20 }) => {
     try {
-      const sender = await User.findById(senderId);
       const receiver = await User.findById(receiverId);
-      if (!sender || !receiver) return socket.emit("error", { message: "User not found." });
+      if (!receiver) return socket.emit("error", { message: "User not found." });
 
-      // Exclude messages from blocked users
-      const blockedUsers = sender.blockedUsers;
+      const senderUser = await User.findById(sender);
+      const blockedUsers = senderUser.blockedUsers;
 
       const messages = await DirectMessage.find({
         $or: [
-          { sender: senderId, receiver: receiverId },
-          { sender: receiverId, receiver: senderId },
+          { sender, receiver: receiverId },
+          { sender: receiverId, receiver: sender },
         ],
-        sender: { $nin: blockedUsers }, // Exclude messages from blocked users
+        sender: { $nin: blockedUsers },
+        isDeleted: false,
       })
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -124,4 +114,3 @@ export const handleMessages = (socket, io) => {
     }
   });
 };
-
