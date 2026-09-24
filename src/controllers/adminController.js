@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import Report from "../models/Report.js";
 import ChatRoom from "../models/ChatRoom.js";
 import { hashPassword, isStrongPassword } from '../utils/passwordHelpers/password-helper.js';
+import { sendError } from '../utils/errorResponse.js';
 
 
 export const registerAdmin = async (req, res) => {
@@ -32,8 +33,7 @@ export const registerAdmin = async (req, res) => {
 
     return res.status(201).json({ message: 'Admin registered successfully.' });
   } catch (error) {
-    console.error('Error registering admin:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    return sendError(res, error, 'Failed to register admin.');
   }
 };
 
@@ -45,10 +45,9 @@ export const viewReports = async (req, res) => {
       .populate("targetMessage")
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, reports });
-  } catch (err) {
-    console.error("Error fetching reports:", err);
-    res.status(500).json({ success: false, message: "Error fetching reports" });
+    res.status(200).json({ reports });
+  } catch (error) {
+    return sendError(res, error, 'Failed to fetch reports.');
   }
 };
 
@@ -58,8 +57,8 @@ export const resolveReport = async (req, res) => {
   try {
     const report = await Report.findById(reportId).populate("targetMessage");
     if (!report) {
-      console.log("Report not found");
-      return res.status(404).json({ success: false, message: "Report not found" });}
+      return res.status(404).json({ message: "Report not found" });
+    }
 
     if (action === "deleteMessage" && report.targetMessage) {
       report.targetMessage.isDeleted = true;
@@ -73,10 +72,9 @@ export const resolveReport = async (req, res) => {
     report.status = "reviewed";
     await report.save();
 
-    res.status(200).json({ success: true, message: "Report resolved" });
-  } catch (err) {
-    console.error("Error resolving report:", err);
-    res.status(500).json({ success: false, message: "Error resolving report" });
+    res.status(200).json({ message: "Report resolved" });
+  } catch (error) {
+    return sendError(res, error, 'Failed to resolve report.');
   }
 };
 
@@ -87,12 +85,12 @@ export const toggleBanUser = async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(userId, { isBanned: ban }, { new: true });
     if (!user) {
-      console.log("User not found");
-      return res.status(404).json({ message: "User not found" });}
+      return res.status(404).json({ message: "User not found" });
+    }
 
     res.status(200).json({ message: `User has been ${ban ? "banned" : "unbanned"}`, user });
   } catch (error) {
-    res.status(500).json({ message: "Error updating ban status" });
+    return sendError(res, error, 'Failed to update ban status.');
   }
 };
 
@@ -103,14 +101,14 @@ export const deleteUser = async (req, res) => {
   try {
     const user = await User.findById(userId);
     if (!user) {
-      console.log("User not found");
-      return res.status(404).json({ message: "User not found" });}
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    await user.deleteOne(); 
+    await user.deleteOne();
 
     res.status(200).json({ message: "User deleted successfully" });
-  } catch {
-    res.status(500).json({ message: "Error deleting user" });
+  } catch (error) {
+    return sendError(res, error, 'Failed to delete user.');
   }
 };
 
@@ -122,23 +120,30 @@ export const promoteToRoomAdmin = async (req, res) => {
   const { userId } = req.body;
   const room = req.room;
 
-  if (room.admins.some(adminId => adminId.toString() === userId)) {
-    console.log("User is already an admin");
-    return res.status(400).json({ message: "User is already an admin" });
+  try {
+    if (room.admins.some(adminId => adminId.toString() === userId)) {
+      return res.status(400).json({ message: "User is already an admin" });
+    }
+
+    room.admins.push(userId);
+    await room.save();
+
+    res.status(200).json({ message: "User promoted to room admin" });
+  } catch (error) {
+    return sendError(res, error, 'Failed to promote user.');
   }
-
-  room.admins.push(userId);
-  await room.save();
-
-  res.status(200).json({ message: "User promoted to room admin" });
 };
 
 export const demoteFromRoomAdmin = async (req, res) => {
   const { userId } = req.body;
   const room = req.room;
 
-  room.admins = room.admins.filter(adminId => adminId.toString() !== userId);
-  await room.save();
+  try {
+    room.admins = room.admins.filter(adminId => adminId.toString() !== userId);
+    await room.save();
 
-  res.status(200).json({ message: "User demoted from room admin" });
+    res.status(200).json({ message: "User demoted from room admin" });
+  } catch (error) {
+    return sendError(res, error, 'Failed to demote user.');
+  }
 };

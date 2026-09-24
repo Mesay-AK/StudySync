@@ -16,7 +16,9 @@ export const handleMessages = (socket, io) => {
       }
 
       const room = await ChatRoom.findById(roomId);
-      if (!room || room.isDeleted) return;
+      if (!room || room.isDeleted) {
+        return socket.emit("error", { message: "This room no longer exists." });
+      }
 
       if (!room.members.some((memberId) => memberId.toString() === sender)) {
         return socket.emit("error", { message: "You are not a member of this room." });

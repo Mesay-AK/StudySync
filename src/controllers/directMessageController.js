@@ -2,6 +2,7 @@ import DirectMessage from "../models/DirectMessage.js";
 import User from "../models/User.js";
 import Report from "../models/Report.js";
 import mongoose, { isValidObjectId } from "mongoose";
+import { sendError } from "../utils/errorResponse.js";
 
 // Summarizes each conversation the user is part of: the other participant,
 // the last message, and how many are unread - what a conversation list needs.
@@ -47,8 +48,7 @@ export const getConversations = async (req, res) => {
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("Error fetching conversations:", error);
-    res.status(500).json({ error: "Error fetching conversations" });
+    return sendError(res, error, "Failed to fetch conversations.");
   }
 };
 
@@ -57,11 +57,11 @@ export const getDirectMessages = async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
 
   if (!isValidObjectId(senderId) || !isValidObjectId(receiverId)) {
-    return res.status(400).json({ error: "Invalid sender or receiver ID" });
+    return res.status(400).json({ message: "Invalid sender or receiver ID" });
   }
 
   if (req.user.id !== senderId && req.user.id !== receiverId) {
-    return res.status(403).json({ error: "Not authorized to view this conversation" });
+    return res.status(403).json({ message: "Not authorized to view this conversation" });
   }
 
   try {
@@ -79,8 +79,7 @@ export const getDirectMessages = async (req, res) => {
 
     res.status(200).json(messages);
   } catch (error) {
-    console.error("Error fetching direct messages:", error);
-    res.status(500).json({ error: "Error fetching direct messages" });
+    return sendError(res, error, "Failed to fetch messages.");
   }
 };
 
@@ -88,12 +87,12 @@ export const searchDirectMessages = async (req, res) => {
   const { senderId, receiverId } = req.params;
   const { keyword, page = 1, limit = 20 } = req.query;
 
-  if (!keyword) return res.status(400).json({ error: "Missing search keyword" });
+  if (!keyword) return res.status(400).json({ message: "Missing search keyword" });
   if (!isValidObjectId(senderId) || !isValidObjectId(receiverId)) {
-    return res.status(400).json({ error: "Invalid user IDs" });
+    return res.status(400).json({ message: "Invalid user IDs" });
   }
   if (req.user.id !== senderId && req.user.id !== receiverId) {
-    return res.status(403).json({ error: "Not authorized to search this conversation" });
+    return res.status(403).json({ message: "Not authorized to search this conversation" });
   }
 
   try {
@@ -112,14 +111,13 @@ export const searchDirectMessages = async (req, res) => {
 
     res.status(200).json(messages);
   } catch (error) {
-    console.error("Error searching direct messages:", error);
-    res.status(500).json({ error: "Error searching direct messages" });
+    return sendError(res, error, "Failed to search messages.");
   }
 };
 
 export const uploadMedia = (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
+    return res.status(400).json({ message: "No file uploaded" });
   }
 
   const fileUrl = `${process.env.BASE_URL}/uploads/${req.file.filename}`;
@@ -158,8 +156,7 @@ export const markAsSeen = async (req, res) => {
 
     return res.status(200).json({ message: "Message marked as seen" });
   } catch (error) {
-    console.error("Error marking message as seen:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to mark message as seen.");
   }
 };
 
@@ -185,8 +182,7 @@ export const updateDirectMessage = async (req, res) => {
 
     return res.status(200).json({ message: 'Message updated', updatedMessage: message });
   } catch (error) {
-    console.error('Error updating direct message:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return sendError(res, error, "Failed to update message.");
   }
 };
 
@@ -214,8 +210,7 @@ export const deleteDirectMessage = async (req, res) => {
 
     return res.status(200).json({ message: 'Message deleted' });
   } catch (error) {
-    console.error('Error deleting direct message:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return sendError(res, error, "Failed to delete message.");
   }
 };
 
@@ -241,8 +236,7 @@ export const sendDirectMessage = async (req, res) => {
 
     return res.status(201).json({ message: "Message sent", data: newMessage });
   } catch (error) {
-    console.error("Error sending direct message:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to send message.");
   }
 };
 
@@ -262,8 +256,7 @@ export const markConversationAsSeen = async (req, res) => {
 
     res.status(200).json({ message: "Conversation marked as seen", updatedCount: updated.modifiedCount });
   } catch (error) {
-    console.error("Error marking conversation as seen:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to mark conversation as seen.");
   }
 };
 
@@ -292,8 +285,7 @@ export const reportDirectMessage = async (req, res) => {
     await report.save();
     res.status(201).json({ message: "Message reported successfully." });
   } catch (error) {
-    console.error("Error reporting direct message:", error);
-    res.status(500).json({ message: "Internal server error." });
+    return sendError(res, error, "Failed to report message.");
   }
 };
 
@@ -309,7 +301,6 @@ export const getUnreadMessages = async (req, res) => {
 
     res.status(200).json(unread);
   } catch (error) {
-    console.error("Error fetching unread messages:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to fetch unread messages.");
   }
 };

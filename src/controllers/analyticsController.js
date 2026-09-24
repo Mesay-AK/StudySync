@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { sendError } from "../utils/errorResponse.js";
 import ChatRoom from "../models/ChatRoom.js";
 import Material from "../models/Material.js";
 import RoomSession from "../models/RoomSession.js";
@@ -82,8 +83,7 @@ export const getMyAnalytics = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error computing analytics:", error);
-    res.status(500).json({ message: "Failed to compute analytics" });
+    return sendError(res, error, "Failed to compute analytics.");
   }
 };
 
@@ -170,7 +170,6 @@ export const getAdminOverview = async (req, res) => {
       recentActivity,
     });
   } catch (error) {
-    console.error("Error computing admin overview:", error);
-    res.status(500).json({ message: "Failed to compute overview" });
+    return sendError(res, error, "Failed to compute overview.");
   }
 };

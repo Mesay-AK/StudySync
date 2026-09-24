@@ -1,5 +1,6 @@
 import Material from "../models/Material.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { sendError } from "../utils/errorResponse.js";
 
 const EXT_TO_FILE_TYPE = {
   ".pdf": "pdf",
@@ -68,8 +69,7 @@ export const uploadMaterial = async (req, res) => {
 
     res.status(201).json(toClientShape(material, req.user.id));
   } catch (error) {
-    console.error("Error uploading material:", error);
-    res.status(500).json({ message: "Failed to upload material" });
+    return sendError(res, error, "Failed to upload material.");
   }
 };
 
@@ -113,8 +113,7 @@ export const getMaterials = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("Error fetching materials:", error);
-    res.status(500).json({ message: "Failed to fetch materials" });
+    return sendError(res, error, "Failed to fetch materials.");
   }
 };
 
@@ -135,7 +134,7 @@ export const toggleLike = async (req, res) => {
 
     res.status(200).json({ likes: material.likedBy.length, isLiked: !alreadyLiked });
   } catch (error) {
-    res.status(500).json({ message: "Failed to update like" });
+    return sendError(res, error, "Failed to update like.");
   }
 };
 
@@ -156,7 +155,7 @@ export const toggleBookmark = async (req, res) => {
 
     res.status(200).json({ isBookmarked: !alreadyBookmarked });
   } catch (error) {
-    res.status(500).json({ message: "Failed to update bookmark" });
+    return sendError(res, error, "Failed to update bookmark.");
   }
 };
 
@@ -171,7 +170,7 @@ export const registerDownload = async (req, res) => {
 
     res.status(200).json({ fileUrl: material.fileUrl, downloads: material.downloads });
   } catch (error) {
-    res.status(500).json({ message: "Failed to register download" });
+    return sendError(res, error, "Failed to register download.");
   }
 };
 
@@ -189,6 +188,6 @@ export const deleteMaterial = async (req, res) => {
 
     res.status(200).json({ message: "Material deleted" });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete material" });
+    return sendError(res, error, "Failed to delete material.");
   }
 };

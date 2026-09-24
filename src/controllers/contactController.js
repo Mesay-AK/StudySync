@@ -1,4 +1,5 @@
 import ContactMessage from "../models/ContactMessage.js";
+import { sendError } from "../utils/errorResponse.js";
 import { sendEmail } from "../utils/emailService.js";
 
 export const submitContactMessage = async (req, res) => {
@@ -21,8 +22,7 @@ export const submitContactMessage = async (req, res) => {
 
     res.status(201).json({ message: "Thanks for reaching out! We'll get back to you soon.", id: contactMessage._id });
   } catch (error) {
-    console.error("Error submitting contact message:", error);
-    res.status(500).json({ message: "Something went wrong. Please try again." });
+    return sendError(res, error, "Failed to send your message. Please try again.");
   }
 };
 
@@ -31,7 +31,7 @@ export const getContactMessages = async (req, res) => {
     const messages = await ContactMessage.find().sort({ createdAt: -1 });
     res.status(200).json(messages);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch contact messages" });
+    return sendError(res, error, "Failed to fetch contact messages.");
   }
 };
 
@@ -41,6 +41,6 @@ export const markContactMessageRead = async (req, res) => {
     if (!message) return res.status(404).json({ message: "Message not found" });
     res.status(200).json(message);
   } catch (error) {
-    res.status(500).json({ message: "Failed to update message" });
+    return sendError(res, error, "Failed to update message.");
   }
 };

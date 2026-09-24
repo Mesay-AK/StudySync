@@ -19,8 +19,11 @@ const handleDirectMessages = (socket, io) => {
       }
 
       const receiverUser = await User.findById(receiver);
-      if (!receiverUser || receiverUser.blockedUsers.includes(sender)) {
-        return; // Silently ignore if sender is blocked
+      if (!receiverUser) {
+        return socket.emit("error", { message: "That user no longer exists." });
+      }
+      if (receiverUser.blockedUsers.includes(sender)) {
+        return; // Silently ignore if sender is blocked - telling them would leak the block
       }
 
       const messageData = {
@@ -79,7 +82,9 @@ const handleDirectMessages = (socket, io) => {
     try {
       const message = await DirectMessage.findById(messageId);
       if (!message || message.status === "read") return;
-      if (message.receiver.toString() !== sender) return;
+      if (message.receiver.toString() !== sender) {
+        return socket.emit("error", { message: "You can't mark that message as read." });
+      }
 
       message.status = "read";
       await message.save();

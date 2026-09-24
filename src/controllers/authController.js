@@ -8,6 +8,7 @@ import {generateRefreshToken,
 } from '../utils/Tokens/jwtTokens.js';
 import {sendEmail} from "../utils/emailService.js";
 import { setAuthCookies, clearAuthCookies } from '../utils/Tokens/authCookies.js';
+import { sendError } from '../utils/errorResponse.js';
 
 export const registerUser = async (req, res) => {
   try {
@@ -39,8 +40,7 @@ export const registerUser = async (req, res) => {
 
     return res.status(201).json({ message: 'User registered successfully.' });
   } catch (error) {
-    console.error('Error registering user:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    return sendError(res, error, "Failed to register. Please try again.");
   }
 };
 
@@ -66,8 +66,7 @@ export const logInUser = async (req, res) => {
 
     return res.status(200).json({ token: accessToken, userId: user._id, displayName: user.displayName });
   } catch (error) {
-    console.error('Error logging in:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    return sendError(res, error, "Failed to log in. Please try again.");
   }
 };
 
@@ -137,8 +136,7 @@ export const requestPasswordReset = async (req, res) => {
 
     res.status(200).json(genericResponse);
   } catch (error) {
-    console.error("Error during password reset request:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to process your request. Please try again.");
   }
 };
 
@@ -166,8 +164,7 @@ export const resetPassword = async (req, res) => {
 
     res.status(200).json({ message: "Password reset successfully" });
   } catch (error) {
-    console.error("Error during password reset:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to reset password. Please try again.");
   }
 };
 
@@ -189,7 +186,6 @@ export const changePassword = async (req, res) => {
 
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (error) {
-    console.error('Error changing password:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return sendError(res, error, "Failed to change password. Please try again.");
   }
 };

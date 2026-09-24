@@ -10,6 +10,8 @@ import passport from './config/passportConfig.js';
 import morgan from 'morgan';
 import path from 'path';
 import cookieParser from 'cookie-parser';
+import multer from 'multer';
+import { sendError } from './utils/errorResponse.js';
 
 import authRouter from './routes/authRoutes.js';
 import userRouter from './routes/userRoutes.js';
@@ -102,8 +104,22 @@ app.use((req, res) => {
 
 // Centralized error handler - catches anything passed to next(err).
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
+  if (err instanceof multer.MulterError) {
+    const messages = {
+      LIMIT_FILE_SIZE: 'That file is too large.',
+      LIMIT_UNEXPECTED_FILE: 'Unexpected file field.',
+      LIMIT_FILE_COUNT: 'Too many files.',
+    };
+    console.error(err);
+    return res.status(400).json({ message: messages[err.code] || 'File upload failed.' });
+  }
+
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    console.error(err);
+    return res.status(401).json({ message: 'Your session is invalid or has expired. Please log in again.' });
+  }
+
+  return sendError(res, err, err.message || 'Something went wrong. Please try again.', err.status || 500);
 });
 
 const PORT = process.env.PORT || 3002;

@@ -1,4 +1,5 @@
 import Notification from "../models/Notification.js";
+import { sendError } from "../utils/errorResponse.js";
 
 export const getNotifications = async (req, res) => {
   try {
@@ -7,8 +8,7 @@ export const getNotifications = async (req, res) => {
       .sort({ createdAt: -1 });
     res.status(200).json(notifications);
   } catch (error) {
-    console.error("Error fetching notifications:", error);
-    res.status(500).json({ error: "Failed to fetch notifications" });
+    return sendError(res, error, "Failed to fetch notifications.");
   }
 };
 
@@ -27,7 +27,6 @@ export const markAsRead = async (req, res) => {
 
     res.status(200).json(notification);
   } catch (error) {
-    console.error("Error marking notification as read:", error);
-    res.status(500).json({ error: "Failed to update notification" });
+    return sendError(res, error, "Failed to update notification.");
   }
 };

@@ -27,7 +27,9 @@ const handleChatRooms = (socket, io) => {
   socket.on("joinRoom", async ({ roomId }) => {
     try {
       const room = await ChatRoom.findById(roomId);
-      if (!room || room.isDeleted) return;
+      if (!room || room.isDeleted) {
+        return socket.emit("error", { message: "This room no longer exists." });
+      }
 
       const alreadyMember = room.members.includes(userId);
       const isAllowed =
@@ -86,7 +88,9 @@ const handleChatRooms = (socket, io) => {
   socket.on("leaveRoom", async ({ roomId }) => {
     try {
       const room = await ChatRoom.findById(roomId);
-      if (!room) return;
+      if (!room) {
+        return socket.emit("error", { message: "This room no longer exists." });
+      }
 
       room.members = room.members.filter((id) => id.toString() !== userId);
       await room.save();

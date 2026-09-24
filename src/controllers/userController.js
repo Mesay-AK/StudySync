@@ -1,5 +1,6 @@
 import { usersOnline } from "../utils/socketHandlers/userHandlers.js";
 import User from "../models/User.js";
+import { sendError } from "../utils/errorResponse.js";
 
 
 export const getUserProfile = async (req, res) => {
@@ -11,8 +12,7 @@ export const getUserProfile = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    console.error("Error fetching user profile:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to fetch user profile.");
   }
 };
 
@@ -53,8 +53,7 @@ export const updateUserProfile = async (req, res) => {
     await user.save();
     res.status(200).json(user);
   } catch (error) {
-    console.error("Error updating user profile:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to update user profile.");
   }
 };
 
@@ -67,8 +66,7 @@ export const deleteProfile = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
     res.status(200).json({ message: "User profile deleted successfully" });
   } catch (error) {
-    console.error("Error deleting user profile:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to delete user profile.");
   }
 };
 
@@ -80,8 +78,7 @@ export const getUserStatus = (req, res) => {
     const isOnline = [...usersOnline.values()].includes(userId);
     res.status(200).json({ userId, onlineStatus: isOnline ? "online" : "offline" });
   } catch (error) {
-    console.error("Error fetching user status:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to fetch user status.");
   }
 };
 
@@ -105,8 +102,7 @@ export const updateUserStatus = async (req, res) => {
 
     res.status(200).json({ userId, onlineStatus: user.onlineStatus });
   } catch (error) {
-    console.error("Error updating user status:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to update user status.");
   }
 };
 
@@ -117,8 +113,7 @@ export const getAllUsers = async (req, res) => {
     const users = await User.find().select("-password");
     res.status(200).json(users);
   } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to fetch users.");
   }
 };
 
@@ -144,8 +139,7 @@ export const blockUser = async (req, res) => {
 
     res.status(200).json({ message: "User blocked successfully", blockedUsers: user.blockedUsers });
   } catch (error) {
-    console.error("Error blocking user:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to block user.");
   }
 };
 
@@ -159,8 +153,7 @@ export const getBlockedUsers = async (req, res) => {
     res.status(200).json(user.blockedUsers);
   }
   catch (error) {
-    console.error("Error fetching blocked users:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to fetch blocked users.");
   }
 
 }
@@ -186,8 +179,7 @@ export const unblockUser = async (req, res) => {
 
     res.status(200).json({ message: "User unblocked successfully", blockedUsers: user.blockedUsers });
   } catch (error) {
-    console.error("Error unblocking user:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to unblock user.");
   }
 }
 
@@ -208,8 +200,7 @@ export const searchUsers = async (req, res) => {
 
     res.status(200).json(users);
   } catch (error) {
-    console.error("Error searching users:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to search users.");
   }
 };
 
@@ -221,8 +212,7 @@ export const getUserSettings = async (req, res) => {
     res.status(200).json(user.settings);
   }
   catch (error) {
-    console.error("Error fetching user settings:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to fetch settings.");
   }
 }
 
@@ -240,8 +230,7 @@ export const updateUserSettings = async (req, res) => {
 
     res.status(200).json(user.settings);
   }catch (error) {
-    console.error("Error updating user settings:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return sendError(res, error, "Failed to update settings.");
   }
 }
 

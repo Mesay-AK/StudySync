@@ -1,4 +1,5 @@
 import Activity from "../models/Activity.js";
+import { sendError } from "../utils/errorResponse.js";
 
 export const getMyActivity = async (req, res) => {
   try {
@@ -11,7 +12,6 @@ export const getMyActivity = async (req, res) => {
 
     res.status(200).json(activities);
   } catch (error) {
-    console.error("Error fetching activity:", error);
-    res.status(500).json({ message: "Failed to fetch activity" });
+    return sendError(res, error, "Failed to fetch activity.");
   }
 };
