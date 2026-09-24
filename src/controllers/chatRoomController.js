@@ -326,6 +326,48 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
+export const updateRoom = async (req, res) => {
+  const { roomId } = req.params;
+  const { name, description, subject, tags, type, maxParticipants } = req.body;
+
+  try {
+    const room = await ChatRoom.findById(roomId);
+    if (!room || room.isDeleted) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    if (!room.admins.some((adminId) => adminId.toString() === req.user.id) && !req.user.isAdmin) {
+      return res.status(403).json({ error: "Only room admins can edit this room" });
+    }
+
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: "Room name can't be empty" });
+      room.name = name.trim();
+    }
+    if (description !== undefined) room.description = description;
+    if (subject !== undefined) room.subject = subject;
+    if (tags !== undefined) room.tags = tags;
+    if (type !== undefined) {
+      if (!["public", "private"].includes(type)) {
+        return res.status(400).json({ error: "Type must be public or private" });
+      }
+      room.type = type;
+    }
+    if (maxParticipants !== undefined) {
+      const max = Number(maxParticipants);
+      if (!Number.isFinite(max) || max < room.members.length) {
+        return res.status(400).json({ error: `Max participants can't be less than the current member count (${room.members.length})` });
+      }
+      room.maxParticipants = max;
+    }
+
+    await room.save();
+    res.status(200).json(room);
+  } catch (error) {
+    res.status(500).json({ error: "Error updating room" });
+  }
+};
+
 export const deleteRoom = async (req, res) => {
   const { roomId } = req.params;
 

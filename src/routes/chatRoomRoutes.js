@@ -13,6 +13,7 @@ import {
   searchRoomMessages,
   updateRoomMessage,
   deleteMessage,
+  updateRoom,
   deleteRoom,
   leaveRoom,
   reportUser,
@@ -35,6 +36,7 @@ chatRoomRoutes.post("/join-private/:roomId", joinPrivateRoom);
 chatRoomRoutes.post("/invite/:roomId", inviteUsers);
 chatRoomRoutes.post("/leave", leaveRoom);
 chatRoomRoutes.delete("/delete/:roomId", deleteRoom);
+chatRoomRoutes.patch("/:roomId", updateRoom);
 
 chatRoomRoutes.post("/:roomId/send", sendMessageToRoom);
 chatRoomRoutes.get("/:roomId/messages", getRoomMessages);
