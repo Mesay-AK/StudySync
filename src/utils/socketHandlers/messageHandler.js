@@ -34,6 +34,14 @@ export const handleMessages = (socket, io) => {
 
       await newMessage.save();
 
+      // The broadcast loop below intentionally skips the sender (they don't
+      // need a notification for their own message) - echo it back to their
+      // own socket directly so their chat panel actually shows what they sent.
+      const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === sender)?.[0];
+      if (senderSocketId) {
+        io.to(senderSocketId).emit("receiveMessage", newMessage);
+      }
+
       // Notify all members who haven't blocked the sender.
       for (const memberId of room.members) {
         if (memberId.toString() === sender) continue;
