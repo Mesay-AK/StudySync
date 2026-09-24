@@ -108,7 +108,7 @@ export const searchDirectMessages = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit))
-      .select("sender receiver content createdAt");
+      .select("sender receiver content media type createdAt");
 
     res.status(200).json(messages);
   } catch (error) {

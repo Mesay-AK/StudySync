@@ -58,7 +58,7 @@ const handleChatRooms = (socket, io) => {
       const messages = await Message.find({ chatRoomId: roomId, isDeleted: false })
         .sort({ createdAt: -1 })
         .limit(20)
-        .select("sender content createdAt")
+        .select("sender content media messageType createdAt")
         .populate("sender", "username displayName");
 
       socket.emit("previousMessages", messages);
