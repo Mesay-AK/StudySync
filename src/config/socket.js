@@ -5,10 +5,11 @@ import { handleDirectMessages } from "../utils/socketHandlers/directMessageHandl
 import { handleMessages } from "../utils/socketHandlers/messageHandler.js";
 import { handleChatRooms } from "../utils/socketHandlers/chatRoomHandler.js";
 import { handleTypingIndicators } from "../utils/socketHandlers/typingHandlers.js";
+import { corsOrigin } from "./corsOrigin.js";
 
 const setupSocket = (server) => {
   const io = new Server(server, {
-    cors: { origin: process.env.FRONTEND_URL, credentials: true },
+    cors: { origin: corsOrigin, credentials: true },
   });
 
   io.use(socketAuthMiddleware);

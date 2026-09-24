@@ -23,6 +23,7 @@ import analyticsRouter from './routes/analyticsRoutes.js';
 import announcementRouter from './routes/announcementRoutes.js';
 import contactRouter from './routes/contactRoutes.js';
 import setupSocket from './config/socket.js';
+import { corsOrigin } from './config/corsOrigin.js';
 
 dotenv.config();
 connectDB();
@@ -38,7 +39,7 @@ setupSocket(server);
 // Socket.IO handshake. Helmet's default same-origin Cross-Origin-Resource-Policy
 // blocks exactly that - relax it while keeping every other helmet protection.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
