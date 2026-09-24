@@ -33,6 +33,7 @@ export const handleMessages = (socket, io) => {
       });
 
       await newMessage.save();
+      await newMessage.populate("sender", "username displayName");
 
       // The broadcast loop below intentionally skips the sender (they don't
       // need a notification for their own message) - echo it back to their
@@ -86,7 +87,8 @@ export const handleMessages = (socket, io) => {
       })
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(limit);
+        .limit(limit)
+        .populate("sender", "username displayName");
 
       socket.emit("roomMessages", messages);
     } catch (err) {
