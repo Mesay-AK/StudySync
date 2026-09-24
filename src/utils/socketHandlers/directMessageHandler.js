@@ -47,6 +47,13 @@ const handleDirectMessages = (socket, io) => {
 
       if (receiverSocketId) {
         newMessage.status = "delivered";
+      }
+
+      // Persist before emitting - clients react to these events by immediately
+      // re-fetching from the REST API, which would race an unsaved write.
+      await newMessage.save();
+
+      if (receiverSocketId) {
         io.to(receiverSocketId).emit("receiveDirectMessage", newMessage);
 
         // Notify the recipient in real-time
@@ -58,8 +65,6 @@ const handleDirectMessages = (socket, io) => {
           content,
         });
       }
-
-      await newMessage.save();
 
       if (senderSocketId) {
         io.to(senderSocketId).emit("messageSent", newMessage);
