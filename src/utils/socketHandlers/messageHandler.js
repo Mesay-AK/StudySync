@@ -9,9 +9,9 @@ import { usersOnline } from "./userHandlers.js";
 export const handleMessages = (socket, io) => {
   const sender = socket.userId;
 
-  socket.on("sendPrivateMessage", async ({ roomId, content }) => {
+  socket.on("sendPrivateMessage", async ({ roomId, content, media }) => {
     try {
-      if (!roomId || !content?.trim()) {
+      if (!roomId || (!content?.trim() && !media)) {
         return socket.emit("error", { message: "Invalid message data." });
       }
 
@@ -22,15 +22,19 @@ export const handleMessages = (socket, io) => {
         return socket.emit("error", { message: "You are not a member of this room." });
       }
 
-      const emojiMatches = [...content.matchAll(emojiRegex())].map(match => match[0]);
+      const emojiMatches = content ? [...content.matchAll(emojiRegex())].map(match => match[0]) : [];
 
       const newMessage = new Message({
         sender,
         chatRoomId: roomId,
-        content,
+        content: content || "",
         status: "delivered",
         emojis: emojiMatches,
       });
+      if (media) {
+        newMessage.media = media;
+        newMessage.messageType = media.type || "file";
+      }
 
       await newMessage.save();
       await newMessage.populate("sender", "username displayName");
