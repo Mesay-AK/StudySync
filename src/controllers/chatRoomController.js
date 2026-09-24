@@ -237,7 +237,8 @@ export const getRoomMessages = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .populate("sender", "username displayName");
 
     res.status(200).json(messages);
   } catch (error) {
@@ -259,7 +260,8 @@ export const searchRoomMessages = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .populate("sender", "username displayName");
 
     res.status(200).json(messages);
   } catch (error) {
