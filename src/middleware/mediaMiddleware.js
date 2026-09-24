@@ -37,7 +37,9 @@ const mediaFileFilter = (req, file, cb) => {
   if (mediaMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type! Images, videos, PDFs, and common document formats are allowed."), false);
+    const error = new Error("Invalid file type! Images, videos, PDFs, and common document formats are allowed.");
+    error.status = 400;
+    cb(error, false);
   }
 };
 
@@ -55,7 +57,9 @@ const materialFileFilter = (req, file, cb) => {
   if (materialMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type for a study material."), false);
+    const error = new Error("Invalid file type for a study material.");
+    error.status = 400;
+    cb(error, false);
   }
 };
 
