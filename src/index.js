@@ -47,6 +47,17 @@ app.use(morgan('dev'));
 app.use(passport.initialize());
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
+// Static /uploads serves files inline (the browser decides how to render
+// them). A real "Download" action needs Content-Disposition: attachment,
+// which res.download() sets automatically - path.basename() strips any
+// directory component so this can't be used to read files outside uploads/.
+app.get('/uploads/:filename/download', (req, res) => {
+  const filePath = path.join(path.resolve(), 'uploads', path.basename(req.params.filename));
+  res.download(filePath, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+  });
+});
+
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
