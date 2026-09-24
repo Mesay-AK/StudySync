@@ -45,7 +45,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(passport.initialize());
-app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
+app.use(
+  '/uploads',
+  // Uploaded attachments need to render inside the frontend's own preview
+  // iframe/lightbox - a different origin from the API even in dev. Helmet's
+  // global X-Frame-Options/frame-ancestors above are right for the app's
+  // HTML/JSON responses, but would silently leave that preview blank for
+  // these static files, so this route gets a relaxed override. Low risk:
+  // these are non-executable file downloads, not interactive pages.
+  (req, res, next) => {
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    next();
+  },
+  express.static(path.join(path.resolve(), 'uploads'))
+);
 
 // Static /uploads serves files inline (the browser decides how to render
 // them). A real "Download" action needs Content-Disposition: attachment,
