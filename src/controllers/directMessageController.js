@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import Report from "../models/Report.js";
 import mongoose, { isValidObjectId } from "mongoose";
 import { sendError } from "../utils/errorResponse.js";
+import { escapeRegex } from "../utils/escapeRegex.js";
 
 // Summarizes each conversation the user is part of: the other participant,
 // the last message, and how many are unread - what a conversation list needs.
@@ -102,7 +103,7 @@ export const searchDirectMessages = async (req, res) => {
         { sender: receiverId, receiver: senderId }
       ],
       isDeleted: false,
-      content: { $regex: keyword, $options: 'i' }
+      content: { $regex: escapeRegex(keyword), $options: 'i' }
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)

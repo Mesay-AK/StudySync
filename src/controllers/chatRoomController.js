@@ -5,6 +5,7 @@ import { sendEmail } from "../utils/emailService.js";
 import Report from "../models/Report.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendError } from "../utils/errorResponse.js";
+import { escapeRegex } from "../utils/escapeRegex.js";
 
 export const getAllPublicRooms = async (req, res) => {
   try {
@@ -250,12 +251,19 @@ export const getRoomMessages = async (req, res) => {
 export const searchRoomMessages = async (req, res) => {
   const { roomId } = req.params;
   const { keyword, page = 1, limit = 20 } = req.query;
+  const userId = req.user.id;
 
   try {
+    const room = await ChatRoom.findById(roomId);
+    if (!room) return res.status(404).json({ message: "Room not found" });
+    if (!room.members.some((m) => m.toString() === userId) && !req.user.isAdmin) {
+      return res.status(403).json({ message: "You are not a member of this room" });
+    }
+
     const messages = await Message.find({
       chatRoomId: roomId,
       isDeleted: false,
-      content: { $regex: keyword, $options: "i" },
+      content: { $regex: escapeRegex(keyword || ""), $options: "i" },
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)

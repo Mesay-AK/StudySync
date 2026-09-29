@@ -1,6 +1,7 @@
 import { usersOnline } from "../utils/socketHandlers/userHandlers.js";
 import User from "../models/User.js";
 import { sendError } from "../utils/errorResponse.js";
+import { escapeRegex } from "../utils/escapeRegex.js";
 
 
 export const getUserProfile = async (req, res) => {
@@ -189,11 +190,12 @@ export const searchUsers = async (req, res) => {
     const { query } = req.query;
     if (!query) return res.status(400).json({ message: "Query is required" });
 
+    const safeQuery = escapeRegex(query);
     const users = await User.find({
       $or: [
-        { username: { $regex: query, $options: "i" } },
-        { displayName: { $regex: query, $options: "i" } },
-        { email: { $regex: query, $options: "i" } }
+        { username: { $regex: safeQuery, $options: "i" } },
+        { displayName: { $regex: safeQuery, $options: "i" } },
+        { email: { $regex: safeQuery, $options: "i" } }
 
       ]
     }).select("-password");
