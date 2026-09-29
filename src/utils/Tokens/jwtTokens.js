@@ -25,11 +25,11 @@ export const generateRefreshToken = async (payload) => {
     { expiresIn: REFRESH_TOKEN_EXPIRY, algorithm: 'HS256' }
   );
 
-  try {
-    await redisClient.set(`refreshToken:${sessionId}`, refreshToken, 'EX', REFRESH_TOKEN_EXPIRY);
-  } catch (error) {
-    console.error('Error storing refresh token in Redis:', error);
-  }
+  // Deliberately not caught here: if this write fails, the refresh token is
+  // unusable (validateRefreshToken requires the Redis-stored copy to match),
+  // so the caller must fail loudly rather than issue a login that silently
+  // can't refresh later.
+  await redisClient.set(`refreshToken:${sessionId}`, refreshToken, 'EX', REFRESH_TOKEN_EXPIRY);
 
   return refreshToken;
 };

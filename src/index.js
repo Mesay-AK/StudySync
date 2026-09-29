@@ -28,6 +28,17 @@ import setupSocket from './config/socket.js';
 import { corsOrigin } from './config/corsOrigin.js';
 
 dotenv.config();
+
+// Refuse to boot with unset or copy-pasted-from-.env.example secrets - signing
+// tokens with a publicly-known value defeats JWT auth entirely.
+const PLACEHOLDER_SECRET = 'change-me';
+for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+  if (!process.env[key] || process.env[key] === PLACEHOLDER_SECRET) {
+    console.error(`Refusing to start: ${key} is missing or still set to the placeholder value. Set a real secret in your .env.`);
+    process.exit(1);
+  }
+}
+
 connectDB();
 
 const app = express();

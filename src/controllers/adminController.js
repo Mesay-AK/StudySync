@@ -121,6 +121,10 @@ export const promoteToRoomAdmin = async (req, res) => {
   const room = req.room;
 
   try {
+    if (!room.members.some(memberId => memberId.toString() === userId)) {
+      return res.status(400).json({ message: "User must be a member of the room to be promoted" });
+    }
+
     if (room.admins.some(adminId => adminId.toString() === userId)) {
       return res.status(400).json({ message: "User is already an admin" });
     }
@@ -139,7 +143,15 @@ export const demoteFromRoomAdmin = async (req, res) => {
   const room = req.room;
 
   try {
-    room.admins = room.admins.filter(adminId => adminId.toString() !== userId);
+    const remainingAdmins = room.admins.filter(adminId => adminId.toString() !== userId);
+    if (remainingAdmins.length === room.admins.length) {
+      return res.status(400).json({ message: "User is not an admin of this room" });
+    }
+    if (remainingAdmins.length === 0) {
+      return res.status(400).json({ message: "Cannot demote the last remaining admin of this room" });
+    }
+
+    room.admins = remainingAdmins;
     await room.save();
 
     res.status(200).json({ message: "User demoted from room admin" });
