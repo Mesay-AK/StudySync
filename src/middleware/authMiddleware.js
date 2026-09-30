@@ -16,7 +16,7 @@ export const authenticate = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    console.error("Authentication error:", err.message);
+    console.error(`[${req.id}] Authentication error:`, err.message);
     return res.status(403).json({ message: "Invalid or expired token" });
   }
 };

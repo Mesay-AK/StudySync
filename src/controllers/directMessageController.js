@@ -278,6 +278,17 @@ export const reportDirectMessage = async (req, res) => {
       return res.status(404).json({ message: "Message not found." });
     }
 
+    const existingReport = await Report.findOne({
+      type: "message",
+      reportedBy: userId,
+      targetMessage: messageId,
+      targetMessageModel: "DirectMessage",
+      status: "pending",
+    });
+    if (existingReport) {
+      return res.status(400).json({ message: "You have already reported this message." });
+    }
+
     const report = new Report({
       type: "message",
       reportedBy: userId,

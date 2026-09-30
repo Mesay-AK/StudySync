@@ -5,7 +5,10 @@ import cors from 'cors';
 import http from 'http';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
+import { randomUUID } from 'crypto';
 import connectDB from './config/db.js';
+import redisClient from './config/redisClient.js';
 import passport from './config/passportConfig.js';
 import morgan from 'morgan';
 import path from 'path';
@@ -53,10 +56,21 @@ setupSocket(server);
 // blocks exactly that - relax it while keeping every other helmet protection.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: corsOrigin, credentials: true }));
+
+// Correlates one request's access log line, error log line(s), and response
+// header, so a report of "it broke around 3pm" can be traced through
+// multiple log lines instead of guessing which ones belong together.
+app.use((req, res, next) => {
+  req.id = randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(morgan('dev'));
+morgan.token('id', (req) => req.id);
+app.use(morgan(':id :method :url :status :response-time ms - :res[content-length]'));
 app.use(passport.initialize());
 app.use(
   '/uploads',
@@ -109,6 +123,22 @@ app.get('/', (req, res) => {
   res.send('API is running...');
 });
 
+// Liveness/readiness probe for load balancers/orchestrators - checks the two
+// stateful dependencies the app actually needs, rather than just "process is
+// running" (which `GET /` alone can't tell you: it responds even if Mongo or
+// Redis are down).
+app.get('/health', (req, res) => {
+  const mongoUp = mongoose.connection.readyState === 1;
+  const redisUp = redisClient.status === 'ready';
+  const status = mongoUp && redisUp ? 'ok' : 'degraded';
+
+  res.status(mongoUp ? 200 : 503).json({
+    status,
+    mongo: mongoUp ? 'up' : 'down',
+    redis: redisUp ? 'up' : 'down',
+  });
+});
+
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
@@ -121,12 +151,12 @@ app.use((err, req, res, next) => {
       LIMIT_UNEXPECTED_FILE: 'Unexpected file field.',
       LIMIT_FILE_COUNT: 'Too many files.',
     };
-    console.error(err);
+    console.error(`[${req.id}]`, err);
     return res.status(400).json({ message: messages[err.code] || 'File upload failed.' });
   }
 
   if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-    console.error(err);
+    console.error(`[${req.id}]`, err);
     return res.status(401).json({ message: 'Your session is invalid or has expired. Please log in again.' });
   }
 

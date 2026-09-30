@@ -6,7 +6,7 @@
 // Every response uses the same { message } shape so the frontend never has
 // to guess which key an endpoint used.
 export const sendError = (res, error, fallbackMessage = 'Something went wrong. Please try again.', fallbackStatus = 500) => {
-  console.error(error);
+  console.error(`[${res.req?.id}]`, error);
 
   if (error?.name === 'ValidationError' && error.errors) {
     const details = Object.values(error.errors).map((e) => e.message);

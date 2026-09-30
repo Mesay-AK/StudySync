@@ -13,21 +13,36 @@ passport.use(
       try {
         const { email, name, picture } = profile._json;
 
-        let user = await User.findOne({ email });
+        // password has `select: false` - fetch it explicitly since it's the
+        // signal for the check below.
+        let user = await User.findOne({ email }).select('+password');
 
-        if (!user) {
-          let username = email.split('@')[0];
-          if (await User.findOne({ username })) {
-            username = `${username}-${profile.id.slice(-6)}`;
+        if (user) {
+          // A password on the account means it was created via local
+          // registration, which never verifies email ownership - anyone
+          // could have pre-registered with this address. Auto-linking
+          // Google's (verified) email to that account would hand whoever
+          // registered it first standing access to the real owner's
+          // Google-authenticated account. Only accounts that were already
+          // OAuth-only (no password) are safe to log straight into.
+          if (user.password) {
+            return done(null, false, { reason: 'account_exists' });
           }
 
-          user = await User.create({
-            username,
-            email,
-            displayName: name,
-            profilePicture: picture,
-          });
+          return done(null, user);
         }
+
+        let username = email.split('@')[0];
+        if (await User.findOne({ username })) {
+          username = `${username}-${profile.id.slice(-6)}`;
+        }
+
+        user = await User.create({
+          username,
+          email,
+          displayName: name,
+          profilePicture: picture,
+        });
 
         return done(null, user);
       } catch (error) {

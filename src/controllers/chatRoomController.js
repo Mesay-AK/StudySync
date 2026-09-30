@@ -449,6 +449,16 @@ export const reportUser = async (req, res) => {
       return res.status(404).json({ message: "User to report not found." });
     }
 
+    const existingReport = await Report.findOne({
+      type: "user",
+      reportedBy: userId,
+      targetUser: targetUserId,
+      status: "pending",
+    });
+    if (existingReport) {
+      return res.status(400).json({ message: "You have already reported this user." });
+    }
+
     const report = new Report({
       type: "user",
       reportedBy: userId,
@@ -477,6 +487,17 @@ export const reportMessage = async (req, res) => {
     const message = await Message.findById(messageId);
     if (!message) {
       return res.status(404).json({ message: "Message not found." });
+    }
+
+    const existingReport = await Report.findOne({
+      type: "message",
+      reportedBy: userId,
+      targetMessage: messageId,
+      targetMessageModel: "Message",
+      status: "pending",
+    });
+    if (existingReport) {
+      return res.status(400).json({ message: "You have already reported this message." });
     }
 
     const report = new Report({

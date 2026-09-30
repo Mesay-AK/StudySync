@@ -13,6 +13,32 @@ const closeSession = async (sessionId) => {
   await session.save();
 };
 
+// A brief network blip triggers a socket disconnect + reconnect + client
+// rejoin-all-rooms, which would otherwise close one RoomSession and
+// immediately open another - polluting "real study time" analytics with
+// phantom short sessions. If this user's session for this room was closed
+// moments ago, reopen it instead of starting a new one. Only ever matches a
+// session that's already closed (leftAt set), so this can't collide with a
+// genuinely concurrent session from another tab.
+const RECONNECT_GRACE_MS = 30 * 1000;
+
+const reopenOrCreateSession = async (userId, roomId) => {
+  const recentlyClosed = await RoomSession.findOne({
+    user: userId,
+    room: roomId,
+    leftAt: { $gte: new Date(Date.now() - RECONNECT_GRACE_MS) },
+  }).sort({ leftAt: -1 });
+
+  if (recentlyClosed) {
+    recentlyClosed.leftAt = null;
+    recentlyClosed.durationSeconds = 0;
+    await recentlyClosed.save();
+    return recentlyClosed;
+  }
+
+  return RoomSession.create({ user: userId, room: roomId, joinedAt: new Date() });
+};
+
 /**
  * Handles real-time room interactions via sockets.
  * @param {Socket} socket - The connected, authenticated socket instance.
@@ -54,7 +80,7 @@ const handleChatRooms = (socket, io) => {
       socket.join(roomId);
       socket.to(roomId).emit("userJoined", { userId, roomId });
 
-      const session = await RoomSession.create({ user: userId, room: roomId, joinedAt: new Date() });
+      const session = await reopenOrCreateSession(userId, roomId);
       openSessionsByRoom.set(roomId, session._id);
 
       const messages = await Message.find({ chatRoomId: roomId, isDeleted: false })
