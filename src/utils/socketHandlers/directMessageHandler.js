@@ -1,8 +1,9 @@
 import DirectMessage from "../../models/DirectMessage.js";
-import { usersOnline } from "./userHandlers.js";
+import { isUserOnline } from "./userHandlers.js";
 import { createAndSendNotification } from "./notificationHandlers.js"
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
+import logger from "../logger.js";
 
 /**
  * Handles all socket events related to direct messaging.
@@ -44,9 +45,10 @@ const handleDirectMessages = (socket, io) => {
 
       const newMessage = new DirectMessage(messageData);
 
-      // Check online status (existence check only - which specific socket
-      // doesn't matter here, unlike the emit targeting below).
-      const receiverOnline = [...usersOnline.values()].includes(receiver);
+      // Check online status - cluster-aware via io.in(userId).fetchSockets(),
+      // so this is correct even if the receiver is connected to a different
+      // app instance than the sender.
+      const receiverOnline = await isUserOnline(io, receiver);
 
       if (receiverOnline) {
         newMessage.status = "delivered";
@@ -74,7 +76,7 @@ const handleDirectMessages = (socket, io) => {
 
       io.to(sender).emit("messageSent", newMessage);
     } catch (err) {
-      console.error("sendDirectMessage error:", err.message);
+      logger.error({ err, sender }, "sendDirectMessage error");
       socket.emit("error", { message: "Failed to send message." });
     }
   });
@@ -92,7 +94,7 @@ const handleDirectMessages = (socket, io) => {
 
       io.to(message.sender.toString()).emit("messageRead", { messageId });
     } catch (err) {
-      console.error("markAsRead error:", err.message);
+      logger.error({ err, sender }, "markAsRead error");
       socket.emit("error", { message: "Failed to mark message as read." });
     }
   });

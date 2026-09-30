@@ -1,4 +1,4 @@
-import { usersOnline } from "../utils/socketHandlers/userHandlers.js";
+import { isUserOnline } from "../utils/socketHandlers/userHandlers.js";
 import User from "../models/User.js";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
@@ -74,10 +74,10 @@ export const deleteProfile = async (req, res) => {
 
 
 
-export const getUserStatus = (req, res) => {
+export const getUserStatus = async (req, res) => {
   try {
     const { userId } = req.params;
-    const isOnline = [...usersOnline.values()].includes(userId);
+    const isOnline = await isUserOnline(req.app.get("io"), userId);
     res.status(200).json({ userId, onlineStatus: isOnline ? "online" : "offline" });
   } catch (error) {
     return sendError(res, error, "Failed to fetch user status.");
