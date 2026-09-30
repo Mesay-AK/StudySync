@@ -170,6 +170,13 @@ export const resetPassword = async (req, res) => {
   }
 };
 
+// Resolves "who am I" from the auth cookie alone, with no id required from the
+// caller - needed for the OAuth redirect flow, where the frontend never
+// receives a userId (only cookies get set server-side on that path).
+export const getCurrentUser = async (req, res) => {
+  res.status(200).json(req.user);
+};
+
 export const changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 

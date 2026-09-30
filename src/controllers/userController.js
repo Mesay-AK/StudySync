@@ -2,6 +2,7 @@ import { usersOnline } from "../utils/socketHandlers/userHandlers.js";
 import User from "../models/User.js";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
+import { clampPagination } from "../utils/pagination.js";
 
 
 export const getUserProfile = async (req, res) => {
@@ -111,8 +112,55 @@ export const updateUserStatus = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select("-password");
-    res.status(200).json(users);
+    const { page = 1, limit = 20, search = "", role = "", status = "", sortBy = "name" } = req.query;
+    const { page: safePage, limit: safeLimit, skip } = clampPagination(page, limit);
+
+    const query = {};
+    if (search) {
+      const safeSearch = escapeRegex(search);
+      query.$or = [
+        { username: { $regex: safeSearch, $options: "i" } },
+        { displayName: { $regex: safeSearch, $options: "i" } },
+        { email: { $regex: safeSearch, $options: "i" } },
+      ];
+    }
+    if (role === "admin") query.isAdmin = true;
+    else if (role === "student") query.isAdmin = false;
+    if (status === "banned") query.isBanned = true;
+    else if (status === "online") query.onlineStatus = "online";
+    else if (status === "offline") query.onlineStatus = "offline";
+
+    const sortMap = {
+      name: { displayName: 1, username: 1 },
+      date: { createdAt: -1 },
+      status: { onlineStatus: 1 },
+    };
+
+    // stats power the dashboard's summary cards, which represent the whole
+    // platform, not whatever's currently searched/filtered - computed
+    // independently of `query`/pagination so they stay accurate once the
+    // table below only fetches one page at a time.
+    const [total, statsTotal, banned, admins, online] = await Promise.all([
+      User.countDocuments(query),
+      User.countDocuments(),
+      User.countDocuments({ isBanned: true }),
+      User.countDocuments({ isAdmin: true }),
+      User.countDocuments({ onlineStatus: "online" }),
+    ]);
+
+    const users = await User.find(query)
+      .select("-password")
+      .sort(sortMap[sortBy] || sortMap.name)
+      .skip(skip)
+      .limit(safeLimit);
+
+    res.status(200).json({
+      users,
+      total,
+      page: safePage,
+      totalPages: Math.ceil(total / safeLimit),
+      stats: { total: statsTotal, banned, admins, online },
+    });
   } catch (error) {
     return sendError(res, error, "Failed to fetch users.");
   }

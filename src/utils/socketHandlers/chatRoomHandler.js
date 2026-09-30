@@ -96,6 +96,25 @@ const handleChatRooms = (socket, io) => {
     }
   });
 
+  // Fired when the client navigates away from a room's view (not a real
+  // "Leave Room" action) - stops this socket receiving further broadcasts
+  // for the room and closes session-time tracking, without touching
+  // room.members. Deliberately separate from "leaveRoom" below, which is a
+  // real, membership-removing leave.
+  socket.on("exitRoomView", async ({ roomId }) => {
+    try {
+      socket.leave(roomId);
+
+      const sessionId = openSessionsByRoom.get(roomId);
+      if (sessionId) {
+        await closeSession(sessionId);
+        openSessionsByRoom.delete(roomId);
+      }
+    } catch (error) {
+      console.error("exitRoomView error:", error.message);
+    }
+  });
+
   socket.on("getRoomParticipants", async (roomId, callback) => {
     try {
       const sockets = await io.in(roomId).fetchSockets();

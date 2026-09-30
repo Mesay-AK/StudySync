@@ -12,6 +12,7 @@ import {
   requestPasswordReset,
   resetPassword,
   changePassword,
+  getCurrentUser,
 } from '../controllers/authController.js';
 
 const authRouter = express.Router();
@@ -47,6 +48,7 @@ authRouter.get('/google/callback', (req, res, next) => {
 
 
 
+authRouter.get('/me', authenticate, getCurrentUser);
 authRouter.post('/register', registerUser);
 authRouter.post('/login',logInUser);
 authRouter.post('/refresh', refreshToken);

@@ -29,10 +29,48 @@ export const getMyRooms = async (req, res) => {
 // Site-admin moderation view: every room, including private ones.
 export const getAllRoomsAdmin = async (req, res) => {
   try {
-    const rooms = await ChatRoom.find({ isDeleted: false })
+    const { page = 1, limit = 20, search = "", type = "" } = req.query;
+    const { page: safePage, limit: safeLimit, skip } = clampPagination(page, limit);
+
+    const query = { isDeleted: false };
+    if (search) {
+      const safeSearch = escapeRegex(search);
+      query.name = { $regex: safeSearch, $options: "i" };
+    }
+    if (type === "public" || type === "private") query.type = type;
+
+    // stats power the dashboard's summary cards, which represent the whole
+    // platform, not whatever's currently searched/filtered - computed
+    // independently of `query`/pagination so they stay accurate once the
+    // table below only fetches one page at a time.
+    const [total, publicCount, privateCount, memberTotals] = await Promise.all([
+      ChatRoom.countDocuments(query),
+      ChatRoom.countDocuments({ isDeleted: false, type: "public" }),
+      ChatRoom.countDocuments({ isDeleted: false, type: "private" }),
+      ChatRoom.aggregate([
+        { $match: { isDeleted: false } },
+        { $group: { _id: null, totalMembers: { $sum: { $size: "$members" } } } },
+      ]),
+    ]);
+
+    const rooms = await ChatRoom.find(query)
       .populate("createdBy", "username displayName")
-      .sort({ createdAt: -1 });
-    res.status(200).json(rooms);
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(safeLimit);
+
+    res.status(200).json({
+      rooms,
+      total,
+      page: safePage,
+      totalPages: Math.ceil(total / safeLimit),
+      stats: {
+        total: publicCount + privateCount,
+        public: publicCount,
+        private: privateCount,
+        totalMembers: memberTotals[0]?.totalMembers || 0,
+      },
+    });
   } catch (error) {
     return sendError(res, error, "Failed to fetch rooms.");
   }
@@ -68,7 +106,7 @@ export const getRoomById = async (req, res) => {
 };
 
 export const createRoom = async (req, res) => {
-  const { name, type, subject, description = "", maxParticipants = 50 } = req.body;
+  const { name, type, subject, description = "", maxParticipants = 50, tags = [] } = req.body;
   const creatorId = req.user.id;
 
   try {
@@ -88,6 +126,7 @@ export const createRoom = async (req, res) => {
       createdBy: creatorId,
       subject,
       description,
+      tags,
       maxParticipants: max,
     });
 
