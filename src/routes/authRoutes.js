@@ -30,7 +30,7 @@ authRouter.get('/google/callback', (req, res, next) => {
   // failed (e.g. account_exists) instead of a single generic reason.
   passport.authenticate('google', { session: false }, async (err, user, info) => {
     if (err) {
-      console.error('OAuth callback error:', err);
+      req.log.error({ err }, 'OAuth callback error');
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth`);
     }
     if (!user) {
@@ -40,7 +40,7 @@ authRouter.get('/google/callback', (req, res, next) => {
     try {
       await handleOAuthSuccess(res, user);
     } catch (error) {
-      console.error('OAuth callback error:', error);
+      req.log.error({ err: error }, 'OAuth callback error');
       res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth`);
     }
   })(req, res, next);

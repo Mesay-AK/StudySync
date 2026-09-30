@@ -1,5 +1,6 @@
 import User from "../../models/User.js";
 import ChatRoom from "../../models/ChatRoom.js";
+import logger from "../logger.js";
 
 const handleTypingIndicators = (socket, io) => {
   const userId = socket.userId;
@@ -49,7 +50,7 @@ const handleTypingIndicators = (socket, io) => {
         await broadcastToRoom("typing", roomId, senderUser);
       }
     } catch (error) {
-      console.error("Error handling 'typing' event:", error.message);
+      logger.error({ err: error, userId }, "Error handling 'typing' event");
     }
   });
 
@@ -64,7 +65,7 @@ const handleTypingIndicators = (socket, io) => {
         await broadcastToRoom("stopTyping", roomId, senderUser);
       }
     } catch (error) {
-      console.error("Error handling 'stopTyping' event:", error.message);
+      logger.error({ err: error, userId }, "Error handling 'stopTyping' event");
     }
   });
 };

@@ -5,6 +5,7 @@ import { createAndSendNotification } from "./notificationHandlers.js";
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { clampPagination } from "../pagination.js";
+import logger from "../logger.js";
 
 export const handleMessages = (socket, io) => {
   const sender = socket.userId;
@@ -68,7 +69,7 @@ export const handleMessages = (socket, io) => {
         });
       }
     } catch (err) {
-      console.error("sendPrivateMessage error:", err.message);
+      logger.error({ err, sender, roomId }, "sendPrivateMessage error");
       socket.emit("error", { message: "Failed to send message." });
     }
   });
@@ -96,7 +97,7 @@ export const handleMessages = (socket, io) => {
 
       socket.emit("roomMessages", messages);
     } catch (err) {
-      console.error("getRoomMessages error:", err.message);
+      logger.error({ err, sender, roomId }, "getRoomMessages error");
       socket.emit("error", { message: "Failed to retrieve messages." });
     }
   });
@@ -124,7 +125,7 @@ export const handleMessages = (socket, io) => {
 
       socket.emit("directMessages", messages);
     } catch (err) {
-      console.error("getDirectMessages error:", err.message);
+      logger.error({ err, sender, receiverId }, "getDirectMessages error");
       socket.emit("error", { message: "Failed to retrieve direct messages." });
     }
   });

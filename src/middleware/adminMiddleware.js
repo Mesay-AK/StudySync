@@ -24,7 +24,7 @@ export const checkRoomAdmin = async (req, res, next) => {
     req.room = room;
     next();
   } catch (error) {
-    console.error("Room admin check error:", error.message);
+    req.log.error({ err: error }, "Room admin check error");
     res.status(500).json({ message: "Server error while verifying admin status." });
   }
 };

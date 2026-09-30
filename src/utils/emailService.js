@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import logger from "./logger.js";
 
 // Postmark's SMTP endpoint accepts the same API token as both username and password.
 const transporter = nodemailer.createTransport({
@@ -19,7 +20,7 @@ export const sendEmail = async ({ to, subject, html }) => {
       html
     });
   } catch (error) {
-    console.error("Error sending email:", error);
+    logger.error({ err: error, to, subject }, "Error sending email");
     throw new Error("Email sending failed");
   }
 };

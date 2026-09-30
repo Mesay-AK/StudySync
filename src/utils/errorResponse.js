@@ -1,3 +1,5 @@
+import logger from "./logger.js";
+
 // Maps a caught error to a safe, descriptive client-facing response instead
 // of a flat generic string. Validation/cast/duplicate-key errors are safe to
 // describe specifically since they're about the request's own input, not
@@ -6,7 +8,7 @@
 // Every response uses the same { message } shape so the frontend never has
 // to guess which key an endpoint used.
 export const sendError = (res, error, fallbackMessage = 'Something went wrong. Please try again.', fallbackStatus = 500) => {
-  console.error(`[${res.req?.id}]`, error);
+  (res.req?.log || logger).error({ err: error }, "Request failed");
 
   if (error?.name === 'ValidationError' && error.errors) {
     const details = Object.values(error.errors).map((e) => e.message);

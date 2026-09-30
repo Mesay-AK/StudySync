@@ -1,5 +1,6 @@
 import User from "../../models/User.js";
 import Notification from "../../models/Notification.js";
+import logger from "../logger.js";
 
 
 export const createAndSendNotification = async ({
@@ -12,7 +13,7 @@ export const createAndSendNotification = async ({
 }) => {
   try {
     if (!recipientId || !senderId) {
-      console.error("Sender or recipient ID missing");
+      logger.error({ recipientId, senderId }, "Sender or recipient ID missing");
       return;
     }
 
@@ -21,19 +22,19 @@ export const createAndSendNotification = async ({
     const recipientUser = await User.findById(recipientId);
 
     if (!senderUser || !recipientUser) {
-      console.error("Sender or recipient not found");
+      logger.error({ senderId, recipientId }, "Sender or recipient not found");
       return;
     }
 
     // Ensure that the sender is not blocked by the recipient
     if (recipientUser.blockedUsers.includes(senderId)) {
-      console.log(`Notification not sent: ${senderId} is blocked by ${recipientId}`);
+      logger.info({ senderId, recipientId }, "Notification not sent: sender is blocked by recipient");
       return; // Recipient has blocked the sender, don't send the notification
     }
 
     // Ensure that the sender has not blocked the recipient
     if (senderUser.blockedUsers.includes(recipientId)) {
-      console.log(`Notification not sent: ${recipientId} is blocked by ${senderId}`);
+      logger.info({ senderId, recipientId }, "Notification not sent: recipient is blocked by sender");
       return; // Sender has blocked the recipient, don't send the notification
     }
 
@@ -51,7 +52,7 @@ export const createAndSendNotification = async ({
     // Emit the notification to the recipient
     io.to(recipientId).emit("newNotification", notification);
   } catch (error) {
-    console.error("Error creating and sending notification:", error.message);
+    logger.error({ err: error, senderId, recipientId }, "Error creating and sending notification");
     // Optional: Emit error message to the recipient (if needed)
     io.to(recipientId).emit("error", { message: "Failed to send notification." });
   }

@@ -3,6 +3,7 @@ import Message from "../../models/Message.js";
 import User from "../../models/User.js";
 import RoomSession from "../../models/RoomSession.js";
 import { logActivity } from "../../utils/activityLogger.js";
+import logger from "../logger.js";
 
 const closeSession = async (sessionId) => {
   const session = await RoomSession.findById(sessionId);
@@ -91,7 +92,7 @@ const handleChatRooms = (socket, io) => {
 
       socket.emit("previousMessages", messages);
     } catch (error) {
-      console.error("joinRoom error:", error);
+      logger.error({ err: error, userId, roomId }, "joinRoom error");
       socket.emit("error", { message: "Failed to join room" });
     }
   });
@@ -111,7 +112,7 @@ const handleChatRooms = (socket, io) => {
         openSessionsByRoom.delete(roomId);
       }
     } catch (error) {
-      console.error("exitRoomView error:", error.message);
+      logger.error({ err: error, userId, roomId }, "exitRoomView error");
     }
   });
 
@@ -125,7 +126,7 @@ const handleChatRooms = (socket, io) => {
 
       callback({ success: true, participants });
     } catch (err) {
-      console.error("Error fetching participants:", err);
+      logger.error({ err, userId, roomId }, "Error fetching participants");
       callback({ success: false, message: "Error fetching participants" });
     }
   });
@@ -149,14 +150,14 @@ const handleChatRooms = (socket, io) => {
         openSessionsByRoom.delete(roomId);
       }
     } catch (error) {
-      console.error("leaveRoom error:", error);
+      logger.error({ err: error, userId, roomId }, "leaveRoom error");
       socket.emit("error", { message: "Failed to leave room" });
     }
   });
 
   socket.on("disconnect", async () => {
     for (const sessionId of openSessionsByRoom.values()) {
-      await closeSession(sessionId).catch((err) => console.error("Error closing room session:", err.message));
+      await closeSession(sessionId).catch((err) => logger.error({ err, userId, sessionId }, "Error closing room session"));
     }
     openSessionsByRoom.clear();
   });

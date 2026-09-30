@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import redisClient from '../../config/redisClient.js';
 import { v4 as uuidv4 } from 'uuid';
+import logger from '../logger.js';
 
 const ACCESS_TOKEN_EXPIRY = Number(process.env.JWT_ACCESS_TOKEN_EXPIRY) || 900;
 const REFRESH_TOKEN_EXPIRY = Number(process.env.JWT_REFRESH_TOKEN_EXPIRY) || 604800;
@@ -82,7 +83,7 @@ export const deleteRefreshToken = async (sessionId) => {
   try {
     await redisClient.del(`refreshToken:${sessionId}`);
   } catch (error) {
-    console.error('Failed to delete refresh token from Redis:', error);
+    logger.error({ err: error, sessionId }, 'Failed to delete refresh token from Redis');
     throw new Error('Failed to delete refresh token from Redis');
   }
 };
