@@ -1,7 +1,7 @@
 import ChatRoom from "../models/ChatRoom.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
-import { sendEmail } from "../utils/emailService.js";
+import { emailQueue } from "../queues/emailQueue.js";
 import Report from "../models/Report.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendError } from "../utils/errorResponse.js";
@@ -230,11 +230,11 @@ export const inviteUsers = async (req, res) => {
     const invitedUsers = await User.find({ _id: { $in: newInvites } });
     await Promise.all(
       invitedUsers.map((user) =>
-        sendEmail({
+        emailQueue.add("room-invite", {
           to: user.email,
           subject: `You're invited to join the room: ${room.name}`,
           html: `<p>You have been invited to join the room: <strong>${room.name}</strong></p>`,
-        }).catch((err) => console.error(`Failed to email ${user.email}:`, err.message))
+        })
       )
     );
 

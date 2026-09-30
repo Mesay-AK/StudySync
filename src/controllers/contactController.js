@@ -1,6 +1,6 @@
 import ContactMessage from "../models/ContactMessage.js";
 import { sendError } from "../utils/errorResponse.js";
-import { sendEmail } from "../utils/emailService.js";
+import { emailQueue } from "../queues/emailQueue.js";
 
 export const submitContactMessage = async (req, res) => {
   try {
@@ -13,11 +13,11 @@ export const submitContactMessage = async (req, res) => {
     const contactMessage = await ContactMessage.create({ name, email, message });
 
     if (process.env.EMAIL_FROM) {
-      sendEmail({
+      emailQueue.add("contact-notification", {
         to: process.env.EMAIL_FROM,
         subject: `New contact form message from ${name}`,
         html: `<p><strong>From:</strong> ${name} (${email})</p><p>${message}</p>`,
-      }).catch((err) => console.error("Failed to send contact notification email:", err.message));
+      }).catch((err) => req.log.error({ err }, "Failed to enqueue contact notification email"));
     }
 
     res.status(201).json({ message: "Thanks for reaching out! We'll get back to you soon.", id: contactMessage._id });

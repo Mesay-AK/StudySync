@@ -6,9 +6,9 @@ import {generateRefreshToken,
         deleteRefreshToken,
         generatePasswordResetToken,
 } from '../utils/Tokens/jwtTokens.js';
-import {sendEmail} from "../utils/emailService.js";
 import { setAuthCookies, clearAuthCookies } from '../utils/Tokens/authCookies.js';
 import { sendError } from '../utils/errorResponse.js';
+import { emailQueue } from '../queues/emailQueue.js';
 
 export const registerUser = async (req, res) => {
   try {
@@ -26,8 +26,8 @@ export const registerUser = async (req, res) => {
 
     const hashedPassword = await hashPassword(password);
     if (!hashedPassword) {
-      console.log('Error hashing password');
-      return res.status(500).json({ message: 'Error hashing password' });   
+      req.log.error('Error hashing password');
+      return res.status(500).json({ message: 'Error hashing password' });
     }
     const newUser = new User({
       username,
@@ -51,7 +51,7 @@ export const logInUser = async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
 
     if (!user || !user.password || !(await comparePassword(password, user.password))) {
-      console.log('Invalid email or password:', email);
+      req.log.info({ email }, 'Failed login attempt: invalid email or password');
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
@@ -94,7 +94,7 @@ export const refreshToken = async (req, res) => {
 
     return res.status(200).json({ accessToken: newAccessToken });
   } catch (error) {
-    console.error('Error refreshing token:', error.message);
+    req.log.error({ err: error }, 'Error refreshing token');
     return res.status(403).json({ message: 'Invalid or expired refresh token' });
   }
 };
@@ -108,7 +108,7 @@ export const logOutUser = async (req, res) => {
       if (decoded) await deleteRefreshToken(decoded.sessionId);
     }
   } catch (error) {
-    console.error('Error logging out:', error);
+    req.log.error({ err: error }, 'Error logging out');
   }
 
   clearAuthCookies(res);
@@ -130,7 +130,7 @@ export const requestPasswordReset = async (req, res) => {
     await user.save();
 
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    await sendEmail({
+    await emailQueue.add("password-reset", {
       to: email,
       subject: "Password Reset Request",
       html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link expires in 1 hour.</p>`
