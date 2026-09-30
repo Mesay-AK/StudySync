@@ -1,20 +1,29 @@
+// Must run before any other local import: several config modules
+// (redisClient.js, jwtTokens.js) read process.env at their own top level
+// when first imported, and ES modules evaluate each import's full subgraph
+// before moving to the next import statement - so if dotenv were required
+// later, or transitively imported after one of those modules, the env vars
+// it loads would already be too late for them (they'd have already read
+// `undefined` - e.g. connecting to Redis with no password at all, silently
+// never sending AUTH, rather than a config error).
+import 'dotenv/config';
 import './compat/slowBufferShim.js';
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import http from 'http';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import { createRateLimiter } from './config/rateLimiter.js';
 import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
 import connectDB from './config/db.js';
 import redisClient from './config/redisClient.js';
 import passport from './config/passportConfig.js';
-import morgan from 'morgan';
+import pinoHttp from 'pino-http';
 import path from 'path';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import { sendError } from './utils/errorResponse.js';
+import logger from './utils/logger.js';
 
 import authRouter from './routes/authRoutes.js';
 import userRouter from './routes/userRoutes.js';
@@ -29,15 +38,14 @@ import announcementRouter from './routes/announcementRoutes.js';
 import contactRouter from './routes/contactRoutes.js';
 import setupSocket from './config/socket.js';
 import { corsOrigin } from './config/corsOrigin.js';
-
-dotenv.config();
+import './queues/emailWorker.js';
 
 // Refuse to boot with unset or copy-pasted-from-.env.example secrets - signing
 // tokens with a publicly-known value defeats JWT auth entirely.
 const PLACEHOLDER_SECRET = 'change-me';
 for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
   if (!process.env[key] || process.env[key] === PLACEHOLDER_SECRET) {
-    console.error(`Refusing to start: ${key} is missing or still set to the placeholder value. Set a real secret in your .env.`);
+    logger.error(`Refusing to start: ${key} is missing or still set to the placeholder value. Set a real secret in your .env.`);
     process.exit(1);
   }
 }
@@ -47,7 +55,11 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
-setupSocket(server);
+const io = await setupSocket(server);
+// Lets plain HTTP controllers (e.g. getUserStatus) query live presence via
+// io.in(userId).fetchSockets() without needing their own reference to the
+// Socket.IO server.
+app.set('io', io);
 
 // The frontend is a separately-hosted SPA (different origin/port, even
 // different domain in production), so it must be able to consume our
@@ -57,20 +69,23 @@ setupSocket(server);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: corsOrigin, credentials: true }));
 
-// Correlates one request's access log line, error log line(s), and response
-// header, so a report of "it broke around 3pm" can be traced through
-// multiple log lines instead of guessing which ones belong together.
-app.use((req, res, next) => {
-  req.id = randomUUID();
-  res.setHeader('X-Request-Id', req.id);
-  next();
-});
+// Structured (JSON) request logging - each line carries the same
+// correlation id used in the response header and in error logs elsewhere
+// (errorResponse.js, authMiddleware.js), via req.log/req.id, so a report of
+// "it broke around 3pm" can be traced through multiple log lines instead of
+// guessing which ones belong together.
+app.use(pinoHttp({
+  logger,
+  genReqId: (req, res) => {
+    const id = randomUUID();
+    res.setHeader('X-Request-Id', id);
+    return id;
+  },
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-morgan.token('id', (req) => req.id);
-app.use(morgan(':id :method :url :status :response-time ms - :res[content-length]'));
 app.use(passport.initialize());
 app.use(
   '/uploads',
@@ -99,11 +114,9 @@ app.get('/uploads/:filename/download', (req, res) => {
   });
 });
 
-const authRateLimiter = rateLimit({
+const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { message: 'Too many attempts, please try again later.' },
 });
 
@@ -151,12 +164,12 @@ app.use((err, req, res, next) => {
       LIMIT_UNEXPECTED_FILE: 'Unexpected file field.',
       LIMIT_FILE_COUNT: 'Too many files.',
     };
-    console.error(`[${req.id}]`, err);
+    req.log.error({ err }, 'File upload rejected');
     return res.status(400).json({ message: messages[err.code] || 'File upload failed.' });
   }
 
   if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-    console.error(`[${req.id}]`, err);
+    req.log.error({ err }, 'Invalid or expired JWT');
     return res.status(401).json({ message: 'Your session is invalid or has expired. Please log in again.' });
   }
 
@@ -164,4 +177,4 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3002;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
