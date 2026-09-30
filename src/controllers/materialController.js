@@ -1,6 +1,7 @@
 import Material from "../models/Material.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendError } from "../utils/errorResponse.js";
+import { clampPagination } from "../utils/pagination.js";
 
 const EXT_TO_FILE_TYPE = {
   ".pdf": "pdf",
@@ -90,6 +91,7 @@ export const getMaterials = async (req, res) => {
     };
 
     const total = await Material.countDocuments(query);
+    const { page: safePage, limit: safeLimit, skip } = clampPagination(page, limit);
     let materials;
 
     if (sortBy === "likes") {
@@ -97,20 +99,20 @@ export const getMaterials = async (req, res) => {
       // fetch matches, sort in memory, then paginate.
       const all = await Material.find(query).populate("uploader", "username displayName");
       all.sort((a, b) => b.likedBy.length - a.likedBy.length);
-      materials = all.slice((page - 1) * limit, page * limit);
+      materials = all.slice(skip, skip + safeLimit);
     } else {
       materials = await Material.find(query)
         .populate("uploader", "username displayName")
         .sort(sortMap[sortBy] || sortMap.date)
-        .skip((page - 1) * limit)
-        .limit(Number(limit));
+        .skip(skip)
+        .limit(safeLimit);
     }
 
     res.status(200).json({
       materials: materials.map((m) => toClientShape(m, req.user.id)),
       total,
-      page: Number(page),
-      totalPages: Math.ceil(total / limit),
+      page: safePage,
+      totalPages: Math.ceil(total / safeLimit),
     });
   } catch (error) {
     return sendError(res, error, "Failed to fetch materials.");

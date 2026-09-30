@@ -4,6 +4,7 @@ import Report from "../models/Report.js";
 import mongoose, { isValidObjectId } from "mongoose";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
+import { clampPagination } from "../utils/pagination.js";
 
 // Summarizes each conversation the user is part of: the other participant,
 // the last message, and how many are unread - what a conversation list needs.
@@ -66,6 +67,7 @@ export const getDirectMessages = async (req, res) => {
   }
 
   try {
+    const { limit: safeLimit, skip } = clampPagination(page, limit);
     const messages = await DirectMessage.find({
       $or: [
         { sender: senderId, receiver: receiverId },
@@ -74,8 +76,8 @@ export const getDirectMessages = async (req, res) => {
       isDeleted: false,
     })
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
+      .skip(skip)
+      .limit(safeLimit)
       .select("sender receiver content createdAt media type status");
 
     res.status(200).json(messages);
@@ -97,6 +99,7 @@ export const searchDirectMessages = async (req, res) => {
   }
 
   try {
+    const { limit: safeLimit, skip } = clampPagination(page, limit);
     const messages = await DirectMessage.find({
       $or: [
         { sender: senderId, receiver: receiverId },
@@ -106,8 +109,8 @@ export const searchDirectMessages = async (req, res) => {
       content: { $regex: escapeRegex(keyword), $options: 'i' }
     })
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
+      .skip(skip)
+      .limit(safeLimit)
       .select("sender receiver content media type createdAt");
 
     res.status(200).json(messages);

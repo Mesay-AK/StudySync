@@ -81,12 +81,14 @@ export const refreshToken = async (req, res) => {
   try {
     const decoded = await validateRefreshToken(oldRefreshToken);
 
-    // Rotate: invalidate the used refresh token and issue a new pair.
+    // Rotate: invalidate the used refresh token and issue a new pair, kept
+    // in the same family so a later replay of this (now-stale) token is
+    // recognized as reuse instead of just "invalid".
     await deleteRefreshToken(decoded.sessionId);
 
     const payload = { userId: decoded.userId, email: decoded.email };
     const newAccessToken = generateAccessToken(payload);
-    const newRefreshToken = await generateRefreshToken(payload);
+    const newRefreshToken = await generateRefreshToken(payload, decoded.familyId);
 
     setAuthCookies(res, newAccessToken, newRefreshToken);
 

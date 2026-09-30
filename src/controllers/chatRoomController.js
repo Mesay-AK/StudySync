@@ -6,6 +6,7 @@ import Report from "../models/Report.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
+import { clampPagination } from "../utils/pagination.js";
 
 export const getAllPublicRooms = async (req, res) => {
   try {
@@ -71,6 +72,14 @@ export const createRoom = async (req, res) => {
   const creatorId = req.user.id;
 
   try {
+    // The creator is added as the first member below, so the room must allow
+    // at least 1 participant - an unvalidated 0/negative value here would
+    // permanently brick the room (immediately "full") the moment it's created.
+    const max = Number(maxParticipants);
+    if (!Number.isFinite(max) || max < 1) {
+      return res.status(400).json({ message: "Max participants must be a positive number" });
+    }
+
     const newRoom = new ChatRoom({
       name,
       type,
@@ -79,7 +88,7 @@ export const createRoom = async (req, res) => {
       createdBy: creatorId,
       subject,
       description,
-      maxParticipants,
+      maxParticipants: max,
     });
 
     const savedRoom = await newRoom.save();
@@ -231,14 +240,15 @@ export const getRoomMessages = async (req, res) => {
     const user = await User.findById(userId);
     const blockedUserIds = user.blockedUsers.map((id) => id.toString());
 
+    const { limit: safeLimit, skip } = clampPagination(page, limit);
     const messages = await Message.find({
       chatRoomId: roomId,
       sender: { $nin: blockedUserIds },
       isDeleted: false,
     })
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
+      .skip(skip)
+      .limit(safeLimit)
       .populate("sender", "username displayName");
 
     res.status(200).json(messages);
@@ -260,14 +270,15 @@ export const searchRoomMessages = async (req, res) => {
       return res.status(403).json({ message: "You are not a member of this room" });
     }
 
+    const { limit: safeLimit, skip } = clampPagination(page, limit);
     const messages = await Message.find({
       chatRoomId: roomId,
       isDeleted: false,
       content: { $regex: escapeRegex(keyword || ""), $options: "i" },
     })
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
+      .skip(skip)
+      .limit(safeLimit)
       .populate("sender", "username displayName");
 
     res.status(200).json(messages);

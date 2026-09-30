@@ -44,11 +44,11 @@ const handleDirectMessages = (socket, io) => {
 
       const newMessage = new DirectMessage(messageData);
 
-      // Check online status
-      const receiverSocketId = [...usersOnline.entries()].find(([, id]) => id === receiver)?.[0];
-      const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === sender)?.[0];
+      // Check online status (existence check only - which specific socket
+      // doesn't matter here, unlike the emit targeting below).
+      const receiverOnline = [...usersOnline.values()].includes(receiver);
 
-      if (receiverSocketId) {
+      if (receiverOnline) {
         newMessage.status = "delivered";
       }
 
@@ -56,8 +56,11 @@ const handleDirectMessages = (socket, io) => {
       // re-fetching from the REST API, which would race an unsaved write.
       await newMessage.save();
 
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("receiveDirectMessage", newMessage);
+      if (receiverOnline) {
+        // Emitting to the per-user room (joined in userHandlers.js on
+        // connect) reaches every socket that user has open, not just
+        // whichever one happened to connect first.
+        io.to(receiver).emit("receiveDirectMessage", newMessage);
 
         // Notify the recipient in real-time
         await createAndSendNotification({
@@ -69,9 +72,7 @@ const handleDirectMessages = (socket, io) => {
         });
       }
 
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("messageSent", newMessage);
-      }
+      io.to(sender).emit("messageSent", newMessage);
     } catch (err) {
       console.error("sendDirectMessage error:", err.message);
       socket.emit("error", { message: "Failed to send message." });
@@ -89,10 +90,7 @@ const handleDirectMessages = (socket, io) => {
       message.status = "read";
       await message.save();
 
-      const senderSocketId = [...usersOnline.entries()].find(([, id]) => id === message.sender.toString())?.[0];
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("messageRead", { messageId });
-      }
+      io.to(message.sender.toString()).emit("messageRead", { messageId });
     } catch (err) {
       console.error("markAsRead error:", err.message);
       socket.emit("error", { message: "Failed to mark message as read." });
