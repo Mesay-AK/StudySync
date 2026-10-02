@@ -4,6 +4,8 @@ import { sendError } from "../utils/errorResponse.js";
 import { clampPagination } from "../utils/pagination.js";
 import { isOptionalString } from "../utils/validation.js";
 import fs from "fs/promises";
+import path from "path";
+import logger from "../utils/logger.js";
 
 const EXT_TO_FILE_TYPE = {
   ".pdf": "pdf",
@@ -198,6 +200,15 @@ export const deleteMaterial = async (req, res) => {
 
     material.isDeleted = true;
     await material.save();
+
+    // The record stays (soft delete, for history/analytics), but the file
+    // itself goes: a "deleted" material used to remain downloadable by anyone
+    // holding its URL - including content an admin removed for moderation.
+    // basename() keeps this confined to the uploads directory.
+    const filePath = path.join(path.resolve(), "uploads", path.basename(material.fileUrl));
+    await fs.unlink(filePath).catch((err) => {
+      if (err.code !== "ENOENT") logger.error({ err, materialId: material._id }, "Failed to delete material file");
+    });
 
     res.status(200).json({ message: "Material deleted" });
   } catch (error) {

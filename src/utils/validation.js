@@ -1,3 +1,7 @@
+// Emails are compared case-insensitively: stored and looked up in one
+// canonical form, so "Ann@x.com" and "ann@x.com" are the same account.
+export const normalizeEmail = (email) => email.trim().toLowerCase();
+
 export const isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
 
 // undefined (field omitted) is allowed; anything present must be a string.

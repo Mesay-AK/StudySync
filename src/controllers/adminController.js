@@ -5,7 +5,7 @@ import Report from "../models/Report.js";
 import ChatRoom from "../models/ChatRoom.js";
 import { hashPassword, isStrongPassword } from '../utils/passwordHelpers/password-helper.js';
 import { sendError } from '../utils/errorResponse.js';
-import { validateNewAccount } from '../utils/validation.js';
+import { validateNewAccount, normalizeEmail } from '../utils/validation.js';
 import { disconnectUser } from '../utils/socketHandlers/safeOn.js';
 import { purgeUserReferences } from './userController.js';
 import { isValidObjectId } from 'mongoose';
@@ -13,10 +13,11 @@ import { isValidObjectId } from 'mongoose';
 
 export const registerAdmin = async (req, res) => {
   try {
-    const { username, email, password, displayName } = req.body;
+    const { username, password, displayName } = req.body;
 
-    const invalid = validateNewAccount({ username, email, password });
+    const invalid = validateNewAccount({ username, email: req.body.email, password });
     if (invalid) return res.status(400).json({ message: invalid });
+    const email = normalizeEmail(req.body.email);
 
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {

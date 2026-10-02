@@ -40,16 +40,19 @@ const handleDirectMessages = (socket, io) => {
         // connect) reaches every socket that user has open, not just
         // whichever one happened to connect first.
         io.to(String(receiver)).emit("receiveDirectMessage", newMessage);
-
-        // Notify the recipient in real-time
-        await createAndSendNotification({
-          io,
-          type: "direct_message",
-          recipientId: String(receiver),
-          senderId: sender,
-          content: newMessage.content,
-        });
       }
+
+      // Stored whether or not the receiver is online - it used to be created
+      // only for online receivers, so someone returning found notifications
+      // for room chatter but none for messages sent directly to them. The
+      // live emit inside is a no-op when they have no socket open.
+      await createAndSendNotification({
+        io,
+        type: "direct_message",
+        recipientId: String(receiver),
+        senderId: sender,
+        content: newMessage.content,
+      });
 
       io.to(sender).emit("messageSent", newMessage);
     } catch (err) {

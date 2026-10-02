@@ -4,7 +4,9 @@ const { Schema, model } = mongoose;
 
 const userSchema = Schema(
   {
-    email: { type: String, required: true, unique: true, index: true },
+    // lowercase/trim are a backstop - callers normalize explicitly via
+    // normalizeEmail() too (utils/validation.js).
+    email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
     username: { type: String, required: true, unique: true, index: true },
     displayName: { type: String, default: "" },
     // Not required: OAuth-only accounts have no local password.

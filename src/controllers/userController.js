@@ -6,6 +6,7 @@ import { clampPagination } from "../utils/pagination.js";
 import { isValidObjectId } from "mongoose";
 import { removeUserFromAllRooms } from "../utils/roomMembership.js";
 import { disconnectUser } from "../utils/socketHandlers/safeOn.js";
+import { normalizeEmail } from "../utils/validation.js";
 
 // What any logged-in user may see about someone else. Email, block list,
 // settings and admin/ban flags used to be returned to everyone by profile and
@@ -56,6 +57,7 @@ export const updateUserProfile = async (req, res) => {
         return res.status(400).json({ message: `${key} must be a string.` });
       }
     }
+    if (updates.email !== undefined) updates.email = normalizeEmail(updates.email);
     if (updates.email === "" || updates.username === "") {
       return res.status(400).json({ message: "Email and username can't be empty." });
     }

@@ -212,11 +212,11 @@ export const deleteDirectMessage = async (req, res) => {
       return res.status(404).json({ message: 'Message not found' });
     }
 
-    if (
-      message.sender.toString() !== userId &&
-      message.receiver.toString() !== userId
-    ) {
-      return res.status(403).json({ message: 'Not authorized to delete this message' });
+    // Deleting hides the message for BOTH people ("unsend"), so only its
+    // author may do it - matching the UI, which only offers delete on your
+    // own messages. The receiver used to be able to erase it via the API.
+    if (message.sender.toString() !== userId) {
+      return res.status(403).json({ message: 'Only the sender can delete this message' });
     }
 
     message.isDeleted = true;

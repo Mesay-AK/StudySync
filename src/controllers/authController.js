@@ -12,7 +12,7 @@ import {generateRefreshToken,
 import { setAuthCookies, clearAuthCookies } from '../utils/Tokens/authCookies.js';
 import { sendError } from '../utils/errorResponse.js';
 import { emailQueue } from '../queues/emailQueue.js';
-import { validateNewAccount } from '../utils/validation.js';
+import { validateNewAccount, normalizeEmail } from '../utils/validation.js';
 
 const WEAK_PASSWORD_MESSAGE = 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.';
 
@@ -26,10 +26,11 @@ const issueSession = async (res, user) => {
 
 export const registerUser = async (req, res) => {
   try {
-    const { username, email, password, displayName } = req.body;
+    const { username, password, displayName } = req.body;
 
-    const invalid = validateNewAccount({ username, email, password });
+    const invalid = validateNewAccount({ username, email: req.body.email, password });
     if (invalid) return res.status(400).json({ message: invalid });
+    const email = normalizeEmail(req.body.email);
 
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
@@ -69,7 +70,7 @@ export const logInUser = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: normalizeEmail(email) }).select('+password');
 
     if (!user || !user.password || !(await comparePassword(password, user.password))) {
       req.log.info({ email }, 'Failed login attempt: invalid email or password');
@@ -150,7 +151,7 @@ export const requestPasswordReset = async (req, res) => {
       return res.status(400).json({ message: 'Email is required.' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizeEmail(email) });
     // Don't reveal whether the email is registered.
     if (!user) return res.status(200).json(genericResponse);
 

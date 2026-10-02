@@ -1,6 +1,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import User from '../models/User.js';
+import { normalizeEmail } from '../utils/validation.js';
 
 passport.use(
   new GoogleStrategy(
@@ -11,7 +12,9 @@ passport.use(
     },
     async (token, tokenSecret, profile, done) => {
       try {
-        const { email, name, picture } = profile._json;
+        const { name, picture } = profile._json;
+        const email = normalizeEmail(profile._json.email || '');
+        if (!email) return done(null, false, { reason: 'no_email' });
 
         // password has `select: false` - fetch it explicitly since it's the
         // signal for the check below.
