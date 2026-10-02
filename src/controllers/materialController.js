@@ -2,6 +2,8 @@ import Material from "../models/Material.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendError } from "../utils/errorResponse.js";
 import { clampPagination } from "../utils/pagination.js";
+import { isOptionalString } from "../utils/validation.js";
+import fs from "fs/promises";
 
 const EXT_TO_FILE_TYPE = {
   ".pdf": "pdf",
@@ -50,12 +52,21 @@ export const uploadMaterial = async (req, res) => {
 
     const { name, description = "", subject = "", tags = "" } = req.body;
 
+    // Multipart fields can arrive repeated (an array) or bracketed (an
+    // object) - tags.split() on either used to crash with a 500.
+    const tagList = Array.isArray(tags) ? tags : [tags];
+    if (!isOptionalString(name) || typeof description !== "string" || typeof subject !== "string" ||
+        !tagList.every((t) => typeof t === "string")) {
+      await fs.unlink(req.file.path).catch(() => {});
+      return res.status(400).json({ message: "Name, description, subject and tags must be text." });
+    }
+
     const material = await Material.create({
       uploader: req.user.id,
       name: name || req.file.originalname,
       description,
       subject,
-      tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+      tags: tagList.flatMap((t) => t.split(",")).map((t) => t.trim()).filter(Boolean),
       fileUrl: `${process.env.BASE_URL}/uploads/${req.file.filename}`,
       fileType: deriveFileType(req.file.originalname),
       size: req.file.size,
@@ -119,22 +130,32 @@ export const getMaterials = async (req, res) => {
   }
 };
 
+// Like/bookmark used to load the document, edit the array in memory and
+// save() it back: a double-click recorded two likes, and an unlike racing
+// other users' likes failed with a 500 (version conflict) and was lost. Each
+// toggle is now one atomic conditional update - $pull if the user is in the
+// set, otherwise $addToSet (which can never add them twice).
+const toggleMembership = async (materialId, field, userId) => {
+  const scope = { _id: materialId, isDeleted: false };
+
+  const removed = await Material.findOneAndUpdate(
+    { ...scope, [field]: userId },
+    { $pull: { [field]: userId } },
+    { new: true }
+  );
+  if (removed) return { material: removed, isSet: false };
+
+  const added = await Material.findOneAndUpdate(scope, { $addToSet: { [field]: userId } }, { new: true });
+  if (!added) return null;
+  return { material: added, isSet: true };
+};
+
 export const toggleLike = async (req, res) => {
   try {
-    const material = await Material.findOne({ _id: req.params.id, isDeleted: false });
-    if (!material) return res.status(404).json({ message: "Material not found" });
+    const result = await toggleMembership(req.params.id, "likedBy", req.user.id);
+    if (!result) return res.status(404).json({ message: "Material not found" });
 
-    const userId = req.user.id;
-    const alreadyLiked = material.likedBy.some((id) => id.toString() === userId);
-
-    if (alreadyLiked) {
-      material.likedBy = material.likedBy.filter((id) => id.toString() !== userId);
-    } else {
-      material.likedBy.push(userId);
-    }
-    await material.save();
-
-    res.status(200).json({ likes: material.likedBy.length, isLiked: !alreadyLiked });
+    res.status(200).json({ likes: result.material.likedBy.length, isLiked: result.isSet });
   } catch (error) {
     return sendError(res, error, "Failed to update like.");
   }
@@ -142,20 +163,10 @@ export const toggleLike = async (req, res) => {
 
 export const toggleBookmark = async (req, res) => {
   try {
-    const material = await Material.findOne({ _id: req.params.id, isDeleted: false });
-    if (!material) return res.status(404).json({ message: "Material not found" });
+    const result = await toggleMembership(req.params.id, "bookmarkedBy", req.user.id);
+    if (!result) return res.status(404).json({ message: "Material not found" });
 
-    const userId = req.user.id;
-    const alreadyBookmarked = material.bookmarkedBy.some((id) => id.toString() === userId);
-
-    if (alreadyBookmarked) {
-      material.bookmarkedBy = material.bookmarkedBy.filter((id) => id.toString() !== userId);
-    } else {
-      material.bookmarkedBy.push(userId);
-    }
-    await material.save();
-
-    res.status(200).json({ isBookmarked: !alreadyBookmarked });
+    res.status(200).json({ isBookmarked: result.isSet });
   } catch (error) {
     return sendError(res, error, "Failed to update bookmark.");
   }

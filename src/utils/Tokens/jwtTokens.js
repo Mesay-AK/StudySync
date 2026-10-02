@@ -8,6 +8,20 @@ import logger from '../logger.js';
 const ACCESS_TOKEN_EXPIRY = Number(process.env.JWT_ACCESS_TOKEN_EXPIRY) || 900;
 const REFRESH_TOKEN_EXPIRY = Number(process.env.JWT_REFRESH_TOKEN_EXPIRY) || 604800;
 
+// The claims every access/refresh token carries. tokenVersion ties the token
+// to the account's current credentials - see isSessionCurrent below.
+export const tokenPayloadFor = (user) => ({
+  userId: user._id,
+  email: user.email,
+  tokenVersion: user.tokenVersion ?? 0,
+});
+
+// False once the account's tokenVersion has been bumped (password reset or
+// change) since this token was issued. Tokens minted before tokenVersion
+// existed carry none and count as version 0, so deploying this doesn't log
+// everyone out.
+export const isSessionCurrent = (decoded, user) => (decoded.tokenVersion ?? 0) === (user.tokenVersion ?? 0);
+
 export const generateAccessToken = (payload) => {
   const sessionId = uuidv4();
   const accessToken = jwt.sign(
@@ -91,3 +105,6 @@ export const deleteRefreshToken = async (sessionId) => {
 export const generatePasswordResetToken = () => {
   return crypto.randomBytes(32).toString('hex');
 };
+
+// Only the hash is stored, so a database leak doesn't hand out working reset links.
+export const hashResetToken = (token) => crypto.createHash('sha256').update(token).digest('hex');

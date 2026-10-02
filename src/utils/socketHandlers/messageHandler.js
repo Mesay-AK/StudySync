@@ -1,18 +1,26 @@
 import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
 import DirectMessage from "../../models/DirectMessage.js";
-import { createAndSendNotification } from "./notificationHandlers.js";
+import Notification from "../../models/Notification.js";
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { clampPagination } from "../pagination.js";
+import { normalizeMedia } from "../mediaValidation.js";
+import { safeOn, payloadOf } from "./safeOn.js";
 import logger from "../logger.js";
 
 export const handleMessages = (socket, io) => {
   const sender = socket.userId;
 
-  socket.on("sendPrivateMessage", async ({ roomId, content, media }) => {
+  safeOn(socket, "sendPrivateMessage", async (payload) => {
+    const { roomId, content, media } = payloadOf(payload);
     try {
-      if (!roomId || (!content?.trim() && !media)) {
+      if (content !== undefined && content !== null && typeof content !== "string") {
+        return socket.emit("error", { message: "Invalid message data." });
+      }
+      const normalized = normalizeMedia(media);
+      if (normalized.error) return socket.emit("error", { message: normalized.error });
+      if (!roomId || (!content?.trim() && !normalized.media)) {
         return socket.emit("error", { message: "Invalid message data." });
       }
 
@@ -29,44 +37,53 @@ export const handleMessages = (socket, io) => {
 
       const newMessage = new Message({
         sender,
-        chatRoomId: roomId,
+        chatRoomId: room._id,
         content: content || "",
         status: "delivered",
         emojis: emojiMatches,
       });
-      if (media) {
-        newMessage.media = media;
-        newMessage.messageType = media.type || "file";
+      if (normalized.media) {
+        newMessage.media = normalized.media;
+        newMessage.messageType = normalized.media.type;
       }
 
       await newMessage.save();
       await newMessage.populate("sender", "username displayName");
 
-      // The broadcast loop below intentionally skips the sender (they don't
+      // The broadcast below intentionally skips the sender (they don't
       // need a notification for their own message) - echo it back to their
       // own per-user room so every tab/device they're connected from sees it.
       io.to(sender).emit("receiveMessage", newMessage);
 
-      // Notify all members who haven't blocked the sender.
-      for (const memberId of room.members) {
-        if (memberId.toString() === sender) continue;
+      // One query for every recipient (members who haven't blocked the
+      // sender), instead of ~3 sequential lookups per member per message.
+      const [senderUser, recipients] = await Promise.all([
+        User.findById(sender).select("blockedUsers"),
+        User.find({ _id: { $in: room.members, $ne: sender }, blockedUsers: { $ne: sender } }).select("_id"),
+      ]);
+      const senderBlocked = new Set((senderUser?.blockedUsers || []).map(String));
 
-        const memberUser = await User.findById(memberId);
-        if (memberUser?.blockedUsers.includes(sender)) continue;
-
+      for (const recipient of recipients) {
         // Emitting to the per-user room (joined in userHandlers.js on
         // connect) reaches every socket that user has open, not just
         // whichever one happened to connect first.
-        io.to(memberId.toString()).emit("receiveMessage", newMessage);
+        io.to(recipient._id.toString()).emit("receiveMessage", newMessage);
+      }
 
-        await createAndSendNotification({
-          io,
+      // Same rule as createAndSendNotification: no notification if either
+      // side has blocked the other.
+      const notifiable = recipients.filter((r) => !senderBlocked.has(r._id.toString()));
+      const notifications = await Notification.insertMany(
+        notifiable.map((r) => ({
           type: "room_message",
-          recipientId: memberId.toString(),
-          senderId: sender,
-          content,
-          metadata: { roomId },
-        });
+          recipient: r._id,
+          sender,
+          content: content || "",
+          metadata: { roomId: room._id.toString() },
+        }))
+      );
+      for (const notification of notifications) {
+        io.to(notification.recipient.toString()).emit("newNotification", notification);
       }
     } catch (err) {
       logger.error({ err, sender, roomId }, "sendPrivateMessage error");
@@ -74,10 +91,11 @@ export const handleMessages = (socket, io) => {
     }
   });
 
-  socket.on("getRoomMessages", async ({ roomId, page = 1, limit = 20 }) => {
+  safeOn(socket, "getRoomMessages", async (payload) => {
+    const { roomId, page = 1, limit = 20 } = payloadOf(payload);
     try {
       const room = await ChatRoom.findById(roomId);
-      if (!room) return socket.emit("error", { message: "Room not found." });
+      if (!room || room.isDeleted) return socket.emit("error", { message: "Room not found." });
       if (!room.members.some((memberId) => memberId.toString() === sender)) {
         return socket.emit("error", { message: "You are not a member of this room." });
       }
@@ -86,7 +104,7 @@ export const handleMessages = (socket, io) => {
       const blockedUsers = user.blockedUsers;
       const { limit: safeLimit, skip } = clampPagination(page, limit);
       const messages = await Message.find({
-        chatRoomId: roomId,
+        chatRoomId: room._id,
         sender: { $nin: blockedUsers },
         isDeleted: false,
       })
@@ -102,7 +120,8 @@ export const handleMessages = (socket, io) => {
     }
   });
 
-  socket.on("getDirectMessages", async ({ receiverId, page = 1, limit = 20 }) => {
+  safeOn(socket, "getDirectMessages", async (payload) => {
+    const { receiverId, page = 1, limit = 20 } = payloadOf(payload);
     try {
       const receiver = await User.findById(receiverId);
       if (!receiver) return socket.emit("error", { message: "User not found." });
@@ -113,8 +132,8 @@ export const handleMessages = (socket, io) => {
       const { limit: safeLimit, skip } = clampPagination(page, limit);
       const messages = await DirectMessage.find({
         $or: [
-          { sender, receiver: receiverId },
-          { sender: receiverId, receiver: sender },
+          { sender, receiver: receiver._id },
+          { sender: receiver._id, receiver: sender },
         ],
         sender: { $nin: blockedUsers },
         isDeleted: false,

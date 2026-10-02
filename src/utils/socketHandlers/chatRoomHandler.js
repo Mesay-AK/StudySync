@@ -3,6 +3,8 @@ import Message from "../../models/Message.js";
 import User from "../../models/User.js";
 import RoomSession from "../../models/RoomSession.js";
 import { logActivity } from "../../utils/activityLogger.js";
+import { joinRoomAtomically, leaveRoomAtomically } from "../roomMembership.js";
+import { safeOn, payloadOf } from "./safeOn.js";
 import logger from "../logger.js";
 
 const closeSession = async (sessionId) => {
@@ -51,40 +53,58 @@ const handleChatRooms = (socket, io) => {
   // rooms this tab/connection was actually in - not the user's other tabs.
   const openSessionsByRoom = new Map();
 
-  socket.on("joinRoom", async ({ roomId }) => {
+  safeOn(socket, "joinRoom", async (payload) => {
+    const { roomId } = payloadOf(payload);
     try {
       const room = await ChatRoom.findById(roomId);
       if (!room || room.isDeleted) {
         return socket.emit("error", { message: "This room no longer exists." });
       }
+      const roomKey = room._id.toString();
 
-      const alreadyMember = room.members.includes(userId);
-      const isAllowed =
-        room.type === "public" ||
-        (room.type === "private" && room.invitedUsers.includes(userId));
-
-      if (!isAllowed) {
-        return socket.emit("unauthorized", { message: "Access to room denied" });
-      }
-
+      const alreadyMember = room.members.some((m) => m.toString() === userId);
       if (!alreadyMember) {
-        room.members.push(userId);
-        await room.save();
-        await logActivity({
-          user: userId,
-          type: "room_joined",
-          description: `Joined the study room "${room.name}"`,
-          metadata: { roomId: room._id },
-        });
+        // Existing members (including a private room's creator, who is never
+        // in invitedUsers) always get in; new members need a public room or
+        // an invite - and, like the REST join, a free seat.
+        const access =
+          room.type === "public" ? { type: "public" }
+          : room.invitedUsers.some((id) => id.toString() === userId) ? { type: "private", invitedUsers: userId }
+          : null;
+        if (!access) {
+          return socket.emit("unauthorized", { message: "Access to room denied" });
+        }
+
+        const result = await joinRoomAtomically(room._id, userId, access);
+        if (result.status === "full") return socket.emit("error", { message: "This room is full." });
+        if (result.status === "not_found") return socket.emit("unauthorized", { message: "Access to room denied" });
+        if (result.status === "joined") {
+          await logActivity({
+            user: userId,
+            type: "room_joined",
+            description: `Joined the study room "${room.name}"`,
+            metadata: { roomId: room._id },
+          });
+        }
       }
 
-      socket.join(roomId);
-      socket.to(roomId).emit("userJoined", { userId, roomId });
+      socket.join(roomKey);
+      socket.to(roomKey).emit("userJoined", { userId, roomId: roomKey });
 
-      const session = await reopenOrCreateSession(userId, roomId);
-      openSessionsByRoom.set(roomId, session._id);
+      // A second joinRoom on the same socket (re-render, StrictMode double
+      // effect) used to open a second session and orphan the first, which
+      // then counted as "still studying" forever.
+      if (!openSessionsByRoom.has(roomKey)) {
+        const session = await reopenOrCreateSession(userId, room._id);
+        openSessionsByRoom.set(roomKey, session._id);
+      }
 
-      const messages = await Message.find({ chatRoomId: roomId, isDeleted: false })
+      const viewer = await User.findById(userId).select("blockedUsers");
+      const messages = await Message.find({
+        chatRoomId: room._id,
+        isDeleted: false,
+        sender: { $nin: viewer?.blockedUsers || [] },
+      })
         .sort({ createdAt: -1 })
         .limit(20)
         .select("sender content media messageType createdAt")
@@ -102,7 +122,9 @@ const handleChatRooms = (socket, io) => {
   // for the room and closes session-time tracking, without touching
   // room.members. Deliberately separate from "leaveRoom" below, which is a
   // real, membership-removing leave.
-  socket.on("exitRoomView", async ({ roomId }) => {
+  safeOn(socket, "exitRoomView", async (payload) => {
+    const { roomId } = payloadOf(payload);
+    if (typeof roomId !== "string") return;
     try {
       socket.leave(roomId);
 
@@ -116,38 +138,51 @@ const handleChatRooms = (socket, io) => {
     }
   });
 
-  socket.on("getRoomParticipants", async (roomId, callback) => {
+  safeOn(socket, "getRoomParticipants", async (roomId, callback) => {
+    const reply = typeof callback === "function" ? callback : () => {};
     try {
-      const sockets = await io.in(roomId).fetchSockets();
+      // Only people who could see the room may see who's in it - this used to
+      // answer for any room id, including private rooms the caller wasn't in.
+      const room = await ChatRoom.findById(roomId);
+      const canView =
+        room && !room.isDeleted &&
+        (room.members.some((m) => m.toString() === userId) || socket.user?.isAdmin);
+      if (!canView) return reply({ success: false, message: "Room not found" });
+
+      const sockets = await io.in(room._id.toString()).fetchSockets();
       const participantIds = [...new Set(sockets.map((s) => s.userId).filter(Boolean))];
 
       const participants = await User.find({ _id: { $in: participantIds } })
         .select("username profilePicture");
 
-      callback({ success: true, participants });
+      reply({ success: true, participants });
     } catch (err) {
       logger.error({ err, userId, roomId }, "Error fetching participants");
-      callback({ success: false, message: "Error fetching participants" });
+      reply({ success: false, message: "Error fetching participants" });
     }
   });
 
-  socket.on("leaveRoom", async ({ roomId }) => {
+  safeOn(socket, "leaveRoom", async (payload) => {
+    const { roomId } = payloadOf(payload);
     try {
       const room = await ChatRoom.findById(roomId);
       if (!room) {
         return socket.emit("error", { message: "This room no longer exists." });
       }
+      const roomKey = room._id.toString();
 
-      room.members = room.members.filter((id) => id.toString() !== userId);
-      await room.save();
+      // Same atomic leave as the REST endpoint: drops admin rights too (they
+      // used to survive a socket leave) and hands admin to another member if
+      // this was the last one.
+      await leaveRoomAtomically(room._id, userId);
 
-      socket.leave(roomId);
-      socket.to(roomId).emit("userLeft", { userId, roomId });
+      socket.leave(roomKey);
+      socket.to(roomKey).emit("userLeft", { userId, roomId: roomKey });
 
-      const sessionId = openSessionsByRoom.get(roomId);
+      const sessionId = openSessionsByRoom.get(roomKey);
       if (sessionId) {
         await closeSession(sessionId);
-        openSessionsByRoom.delete(roomId);
+        openSessionsByRoom.delete(roomKey);
       }
     } catch (error) {
       logger.error({ err: error, userId, roomId }, "leaveRoom error");

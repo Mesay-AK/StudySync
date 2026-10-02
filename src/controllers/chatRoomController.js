@@ -3,10 +3,37 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import { emailQueue } from "../queues/emailQueue.js";
 import Report from "../models/Report.js";
+import { isValidObjectId } from "mongoose";
 import { logActivity } from "../utils/activityLogger.js";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
+import { escapeHtml } from "../utils/escapeHtml.js";
 import { clampPagination } from "../utils/pagination.js";
+import { isNonEmptyString, isOptionalString, isStringArray } from "../utils/validation.js";
+import { joinRoomAtomically, leaveRoomAtomically } from "../utils/roomMembership.js";
+
+const isMemberOf = (room, userId) => room.members.some((m) => m.toString() === userId);
+
+// Shared by the REST join endpoints: maps joinRoomAtomically's outcome onto
+// the response, and logs activity only for a genuinely new membership.
+const respondToJoin = async (res, result, { userId, notFoundStatus, notFoundMessage, successMessage }) => {
+  if (result.status === "not_found") return res.status(notFoundStatus).json({ message: notFoundMessage });
+  if (result.status === "full") return res.status(409).json({ message: "This room is full" });
+
+  if (result.status === "joined") {
+    await logActivity({
+      user: userId,
+      type: "room_joined",
+      description: `Joined the study room "${result.room.name}"`,
+      metadata: { roomId: result.room._id },
+    });
+  }
+  return res.status(200).json({ message: successMessage, room: result.room });
+};
+
+// Room-scoped duplicate reports are enforced by a partial unique index on
+// Report; translate that into the same response the pre-check gives.
+const isDuplicateReport = (error) => error?.code === 11000;
 
 export const getAllPublicRooms = async (req, res) => {
   try {
@@ -110,6 +137,13 @@ export const createRoom = async (req, res) => {
   const creatorId = req.user.id;
 
   try {
+    if (!isNonEmptyString(name)) {
+      return res.status(400).json({ message: "Room name is required" });
+    }
+    if (!isOptionalString(subject) || typeof description !== "string" || !isStringArray(tags)) {
+      return res.status(400).json({ message: "Subject and description must be text, and tags a list of text" });
+    }
+
     // The creator is added as the first member below, so the room must allow
     // at least 1 participant - an unvalidated 0/negative value here would
     // permanently brick the room (immediately "full") the moment it's created.
@@ -119,7 +153,7 @@ export const createRoom = async (req, res) => {
     }
 
     const newRoom = new ChatRoom({
-      name,
+      name: name.trim(),
       type,
       members: [creatorId],
       admins: [creatorId],
@@ -147,31 +181,16 @@ export const createRoom = async (req, res) => {
 
 
 export const joinPublicRoom = async (req, res) => {
-  const { roomId } = req.params;
   const userId = req.user.id;
 
   try {
-    const room = await ChatRoom.findById(roomId);
-    if (!room || room.isDeleted || room.type !== "public") {
-      return res.status(404).json({ message: "Public room not found" });
-    }
-
-    if (!room.members.includes(userId) && room.members.length >= room.maxParticipants) {
-      return res.status(409).json({ message: "This room is full" });
-    }
-
-    if (!room.members.includes(userId)) {
-      room.members.push(userId);
-      await room.save();
-      await logActivity({
-        user: userId,
-        type: "room_joined",
-        description: `Joined the study room "${room.name}"`,
-        metadata: { roomId: room._id },
-      });
-    }
-
-    res.status(200).json({ message: "Joined public room successfully", room });
+    const result = await joinRoomAtomically(req.params.roomId, userId, { type: "public" });
+    return respondToJoin(res, result, {
+      userId,
+      notFoundStatus: 404,
+      notFoundMessage: "Public room not found",
+      successMessage: "Joined public room successfully",
+    });
   } catch (error) {
     return sendError(res, error, "Failed to join public room.");
   }
@@ -179,31 +198,16 @@ export const joinPublicRoom = async (req, res) => {
 
 
 export const joinPrivateRoom = async (req, res) => {
-  const { roomId } = req.params;
   const userId = req.user.id;
 
   try {
-    const room = await ChatRoom.findById(roomId);
-    if (!room || room.isDeleted || room.type !== "private" || !room.invitedUsers.includes(userId)) {
-      return res.status(403).json({ message: "Not invited or invalid room" });
-    }
-
-    if (!room.members.includes(userId) && room.members.length >= room.maxParticipants) {
-      return res.status(409).json({ message: "This room is full" });
-    }
-
-    if (!room.members.includes(userId)) {
-      room.members.push(userId);
-      await room.save();
-      await logActivity({
-        user: userId,
-        type: "room_joined",
-        description: `Joined the study room "${room.name}"`,
-        metadata: { roomId: room._id },
-      });
-    }
-
-    res.status(200).json({ message: "Joined private room successfully", room });
+    const result = await joinRoomAtomically(req.params.roomId, userId, { type: "private", invitedUsers: userId });
+    return respondToJoin(res, result, {
+      userId,
+      notFoundStatus: 403,
+      notFoundMessage: "Not invited or invalid room",
+      successMessage: "Joined private room successfully",
+    });
   } catch (error) {
     return sendError(res, error, "Failed to join room.");
   }
@@ -214,7 +218,11 @@ export const inviteUsers = async (req, res) => {
   const { userIds } = req.body;
 
   try {
-    const room = await ChatRoom.findById(roomId);
+    if (!Array.isArray(userIds) || !userIds.every(isValidObjectId)) {
+      return res.status(400).json({ message: "userIds must be a list of user IDs" });
+    }
+
+    const room = await ChatRoom.findOne({ _id: roomId, isDeleted: false });
     if (!room) {
       return res.status(404).json({ message: "Room not found" });
     }
@@ -223,22 +231,30 @@ export const inviteUsers = async (req, res) => {
       return res.status(403).json({ message: "Only room admins can invite users" });
     }
 
-    const newInvites = (userIds || []).filter((id) => !room.invitedUsers.includes(id));
-    room.invitedUsers.push(...newInvites);
-    await room.save();
+    // Only real accounts can be invited.
+    const invitedUsers = await User.find({ _id: { $in: userIds } });
+    const newInvites = invitedUsers.filter((u) => !room.invitedUsers.some((id) => id.equals(u._id)));
 
-    const invitedUsers = await User.find({ _id: { $in: newInvites } });
+    const updated = await ChatRoom.findByIdAndUpdate(
+      room._id,
+      { $addToSet: { invitedUsers: { $each: newInvites.map((u) => u._id) } } },
+      { new: true }
+    );
+
+    // The room name is user-controlled; unescaped, a room named like an
+    // <a href> became a working link in an email sent from our domain.
+    const safeName = escapeHtml(room.name);
     await Promise.all(
-      invitedUsers.map((user) =>
+      newInvites.map((user) =>
         emailQueue.add("room-invite", {
           to: user.email,
           subject: `You're invited to join the room: ${room.name}`,
-          html: `<p>You have been invited to join the room: <strong>${room.name}</strong></p>`,
+          html: `<p>You have been invited to join the room: <strong>${safeName}</strong></p>`,
         })
       )
     );
 
-    res.status(200).json({ message: "Users invited successfully", room });
+    res.status(200).json({ message: "Users invited successfully", room: updated });
   } catch (error) {
     return sendError(res, error, "Failed to invite users.");
   }
@@ -250,8 +266,12 @@ export const sendMessageToRoom = async (req, res) => {
   const sender = req.user.id;
 
   try {
+    if (!isNonEmptyString(content)) {
+      return res.status(400).json({ message: "Message content is required" });
+    }
+
     const room = await ChatRoom.findById(roomId);
-    if (!room || room.isDeleted || !room.members.some((m) => m.toString() === sender)) {
+    if (!room || room.isDeleted || !isMemberOf(room, sender)) {
       return res.status(403).json({ message: "You are not a member of this room" });
     }
 
@@ -264,25 +284,34 @@ export const sendMessageToRoom = async (req, res) => {
   }
 };
 
+// Shared by message history and search: rooms must exist and not be
+// deleted (deleted rooms' messages used to stay readable), and the caller
+// must be a member or a site admin. Resolves the room, or null after
+// already sending the error response.
+const loadReadableRoom = async (req, res) => {
+  const room = await ChatRoom.findById(req.params.roomId);
+  if (!room || room.isDeleted) {
+    res.status(404).json({ message: "Room not found" });
+    return null;
+  }
+  if (!isMemberOf(room, req.user.id) && !req.user.isAdmin) {
+    res.status(403).json({ message: "You are not a member of this room" });
+    return null;
+  }
+  return room;
+};
+
 export const getRoomMessages = async (req, res) => {
   const { roomId } = req.params;
   const { page = 1, limit = 20 } = req.query;
-  const userId = req.user.id;
 
   try {
-    const room = await ChatRoom.findById(roomId);
-    if (!room) return res.status(404).json({ message: "Room not found" });
-    if (!room.members.some((m) => m.toString() === userId) && !req.user.isAdmin) {
-      return res.status(403).json({ message: "You are not a member of this room" });
-    }
-
-    const user = await User.findById(userId);
-    const blockedUserIds = user.blockedUsers.map((id) => id.toString());
+    if (!(await loadReadableRoom(req, res))) return;
 
     const { limit: safeLimit, skip } = clampPagination(page, limit);
     const messages = await Message.find({
       chatRoomId: roomId,
-      sender: { $nin: blockedUserIds },
+      sender: { $nin: req.user.blockedUsers },
       isDeleted: false,
     })
       .sort({ createdAt: -1 })
@@ -299,21 +328,19 @@ export const getRoomMessages = async (req, res) => {
 
 export const searchRoomMessages = async (req, res) => {
   const { roomId } = req.params;
-  const { keyword, page = 1, limit = 20 } = req.query;
-  const userId = req.user.id;
+  const { keyword = "", page = 1, limit = 20 } = req.query;
 
   try {
-    const room = await ChatRoom.findById(roomId);
-    if (!room) return res.status(404).json({ message: "Room not found" });
-    if (!room.members.some((m) => m.toString() === userId) && !req.user.isAdmin) {
-      return res.status(403).json({ message: "You are not a member of this room" });
-    }
+    if (!(await loadReadableRoom(req, res))) return;
 
     const { limit: safeLimit, skip } = clampPagination(page, limit);
     const messages = await Message.find({
       chatRoomId: roomId,
+      // Same block filtering as the history endpoint - search used to
+      // surface messages from users the caller had blocked.
+      sender: { $nin: req.user.blockedUsers },
       isDeleted: false,
-      content: { $regex: escapeRegex(keyword || ""), $options: "i" },
+      content: { $regex: escapeRegex(keyword), $options: "i" },
     })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -333,6 +360,10 @@ export const updateRoomMessage = async (req, res) => {
     const { newContent } = req.body;
     const userId = req.user.id;
 
+    if (typeof newContent !== "string") {
+      return res.status(400).json({ message: "newContent is required" });
+    }
+
     const message = await Message.findById(messageId);
     if (!message || message.isDeleted) {
       return res.status(404).json({ message: "Message not found" });
@@ -340,6 +371,11 @@ export const updateRoomMessage = async (req, res) => {
 
     if (message.sender.toString() !== userId) {
       return res.status(403).json({ message: "You are not allowed to edit this message" });
+    }
+
+    // A text-only message edited down to nothing would be an invisible ghost.
+    if (!newContent.trim() && !message.media?.url) {
+      return res.status(400).json({ message: "Message content can't be empty" });
     }
 
     message.content = newContent;
@@ -387,6 +423,13 @@ export const updateRoom = async (req, res) => {
   const { name, description, subject, tags, type, maxParticipants } = req.body;
 
   try {
+    if (!isOptionalString(name) || !isOptionalString(description) || !isOptionalString(subject)) {
+      return res.status(400).json({ message: "Name, description and subject must be text" });
+    }
+    if (tags !== undefined && !isStringArray(tags)) {
+      return res.status(400).json({ message: "Tags must be a list of text" });
+    }
+
     const room = await ChatRoom.findById(roomId);
     if (!room || room.isDeleted) {
       return res.status(404).json({ message: "Room not found" });
@@ -452,13 +495,12 @@ export const leaveRoom = async (req, res) => {
     try {
         const { roomId } = req.body;
         const userId = req.user.id;
-        const room = await ChatRoom.findById(roomId);
 
-        if (!room) return res.status(404).json({ message: "Room not found" });
+        if (!(await ChatRoom.exists({ _id: roomId }))) return res.status(404).json({ message: "Room not found" });
 
-        room.members = room.members.filter(member => member.toString() !== userId);
-        room.admins = room.admins.filter(admin => admin.toString() !== userId);
-        await room.save();
+        const room = await leaveRoomAtomically(roomId, userId);
+        // Not a member: nothing to undo, and no "Left" activity to record.
+        if (!room) return res.status(200).json({ message: "Left room successfully", room: await ChatRoom.findById(roomId) });
 
         await logActivity({
           user: userId,
@@ -479,7 +521,7 @@ export const reportUser = async (req, res) => {
     const userId = req.user.id; // user doing the report
     const { targetUserId, reason } = req.body;
 
-    if (!targetUserId || !reason) {
+    if (!targetUserId || !isNonEmptyString(reason)) {
       return res.status(400).json({ message: "Target user and reason are required." });
     }
 
@@ -508,6 +550,7 @@ export const reportUser = async (req, res) => {
     await report.save();
     res.status(201).json({ message: "User reported successfully." });
   } catch (error) {
+    if (isDuplicateReport(error)) return res.status(400).json({ message: "You have already reported this user." });
     return sendError(res, error, "Failed to report user.");
   }
 };
@@ -519,7 +562,7 @@ export const reportMessage = async (req, res) => {
     const userId = req.user.id;
     const { messageId, reason } = req.body;
 
-    if (!messageId || !reason) {
+    if (!messageId || !isNonEmptyString(reason)) {
       return res.status(400).json({ message: "Message ID and reason are required." });
     }
 
@@ -549,6 +592,7 @@ export const reportMessage = async (req, res) => {
     await report.save();
     res.status(201).json({ message: "Message reported successfully." });
   } catch (error) {
+    if (isDuplicateReport(error)) return res.status(400).json({ message: "You have already reported this message." });
     return sendError(res, error, "Failed to report message.");
   }
 };

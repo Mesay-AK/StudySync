@@ -1,12 +1,14 @@
 import ContactMessage from "../models/ContactMessage.js";
 import { sendError } from "../utils/errorResponse.js";
 import { emailQueue } from "../queues/emailQueue.js";
+import { escapeHtml } from "../utils/escapeHtml.js";
+import { isNonEmptyString } from "../utils/validation.js";
 
 export const submitContactMessage = async (req, res) => {
   try {
     const { name, email, message } = req.body;
 
-    if (!name?.trim() || !email?.trim() || !message?.trim()) {
+    if (!isNonEmptyString(name) || !isNonEmptyString(email) || !isNonEmptyString(message)) {
       return res.status(400).json({ message: "Name, email, and message are required." });
     }
 
@@ -16,7 +18,9 @@ export const submitContactMessage = async (req, res) => {
       emailQueue.add("contact-notification", {
         to: process.env.EMAIL_FROM,
         subject: `New contact form message from ${name}`,
-        html: `<p><strong>From:</strong> ${name} (${email})</p><p>${message}</p>`,
+        // Every field is attacker-controlled (no auth on this form) and lands
+        // in staff inboxes as HTML - escaped so it can't become a link/markup.
+        html: `<p><strong>From:</strong> ${escapeHtml(name)} (${escapeHtml(email)})</p><p>${escapeHtml(message)}</p>`,
       }).catch((err) => req.log.error({ err }, "Failed to enqueue contact notification email"));
     }
 

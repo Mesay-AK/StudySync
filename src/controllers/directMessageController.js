@@ -5,6 +5,8 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
 import { clampPagination } from "../utils/pagination.js";
+import { prepareDirectMessage } from "../utils/directMessageRules.js";
+import { isNonEmptyString } from "../utils/validation.js";
 
 // Summarizes each conversation the user is part of: the other participant,
 // the last message, and how many are unread - what a conversation list needs.
@@ -171,6 +173,10 @@ export const updateDirectMessage = async (req, res) => {
     const { newContent } = req.body;
     const userId = req.user.id;
 
+    if (typeof newContent !== 'string') {
+      return res.status(400).json({ message: 'newContent is required' });
+    }
+
     const message = await DirectMessage.findById(messageId);
 
     if (!message || message.isDeleted) {
@@ -179,6 +185,10 @@ export const updateDirectMessage = async (req, res) => {
 
     if (message.sender.toString() !== userId) {
       return res.status(403).json({ message: 'You are not allowed to edit this message' });
+    }
+
+    if (!newContent.trim() && !message.media?.url) {
+      return res.status(400).json({ message: "Message content can't be empty" });
     }
 
     message.content = newContent;
@@ -220,22 +230,12 @@ export const deleteDirectMessage = async (req, res) => {
 
 export const sendDirectMessage = async (req, res) => {
   try {
-    const { receiverId, content = "", media = null, type = "text" } = req.body;
-    const senderId = req.user.id;
+    const { receiverId, content = "", media = null } = req.body;
 
-    if (!receiverId || (!content && !media)) {
-      return res.status(400).json({ message: "Missing content or receiver" });
-    }
+    const prepared = await prepareDirectMessage({ senderId: req.user.id, receiverId, content, media });
+    if (prepared.error) return res.status(prepared.status).json({ message: prepared.error });
 
-    const newMessage = new DirectMessage({
-      sender: senderId,
-      receiver: receiverId,
-      content,
-      media,
-      type,
-      status: 'sent'
-    });
-
+    const newMessage = new DirectMessage(prepared.message);
     await newMessage.save();
 
     return res.status(201).json({ message: "Message sent", data: newMessage });
@@ -269,7 +269,7 @@ export const reportDirectMessage = async (req, res) => {
     const userId = req.user.id;
     const { messageId, reason } = req.body;
 
-    if (!messageId || !reason) {
+    if (!messageId || !isNonEmptyString(reason)) {
       return res.status(400).json({ message: "Message ID and reason are required." });
     }
 
@@ -300,6 +300,8 @@ export const reportDirectMessage = async (req, res) => {
     await report.save();
     res.status(201).json({ message: "Message reported successfully." });
   } catch (error) {
+    // Concurrent duplicates are caught by Report's partial unique index.
+    if (error?.code === 11000) return res.status(400).json({ message: "You have already reported this message." });
     return sendError(res, error, "Failed to report message.");
   }
 };

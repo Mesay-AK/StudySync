@@ -1,5 +1,5 @@
 import cookie from 'cookie';
-import { verifyAccessToken } from '../utils/Tokens/jwtTokens.js';
+import { verifyAccessToken, isSessionCurrent } from '../utils/Tokens/jwtTokens.js';
 import User from '../models/User.js';
 
 // Authenticates the socket handshake using the same accessToken cookie (or a
@@ -19,6 +19,7 @@ export const socketAuthMiddleware = async (socket, next) => {
 
     if (!user) return next(new Error('User not found'));
     if (user.isBanned) return next(new Error('Account banned'));
+    if (!isSessionCurrent(decoded, user)) return next(new Error('Session revoked'));
 
     socket.userId = user._id.toString();
     socket.user = user;

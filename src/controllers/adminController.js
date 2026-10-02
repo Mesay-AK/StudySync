@@ -5,11 +5,18 @@ import Report from "../models/Report.js";
 import ChatRoom from "../models/ChatRoom.js";
 import { hashPassword, isStrongPassword } from '../utils/passwordHelpers/password-helper.js';
 import { sendError } from '../utils/errorResponse.js';
+import { validateNewAccount } from '../utils/validation.js';
+import { disconnectUser } from '../utils/socketHandlers/safeOn.js';
+import { purgeUserReferences } from './userController.js';
+import { isValidObjectId } from 'mongoose';
 
 
 export const registerAdmin = async (req, res) => {
   try {
     const { username, email, password, displayName } = req.body;
+
+    const invalid = validateNewAccount({ username, email, password });
+    if (invalid) return res.status(400).json({ message: invalid });
 
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
@@ -25,7 +32,7 @@ export const registerAdmin = async (req, res) => {
       username,
       email,
       password: await hashPassword(password),
-      displayName: displayName || username,
+      displayName: typeof displayName === 'string' && displayName ? displayName : username,
       isAdmin: true,
     });
 
@@ -67,6 +74,7 @@ export const resolveReport = async (req, res) => {
 
     if (action === "banUser" && report.targetUser) {
       await User.findByIdAndUpdate(report.targetUser, { isBanned: true });
+      disconnectUser(req.app.get("io"), report.targetUser);
     }
 
     report.status = "reviewed";
@@ -83,10 +91,18 @@ export const toggleBanUser = async (req, res) => {
   const { userId, ban = true } = req.body;
 
   try {
+    if (typeof ban !== "boolean") {
+      return res.status(400).json({ message: "ban must be true or false." });
+    }
+
     const user = await User.findByIdAndUpdate(userId, { isBanned: ban }, { new: true });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    // Socket auth only runs at handshake time - without this, a banned
+    // user's already-open sockets kept sending messages.
+    if (ban) disconnectUser(req.app.get("io"), user._id);
 
     res.status(200).json({ message: `User has been ${ban ? "banned" : "unbanned"}`, user });
   } catch (error) {
@@ -105,6 +121,7 @@ export const deleteUser = async (req, res) => {
     }
 
     await user.deleteOne();
+    await purgeUserReferences(req.app.get("io"), user._id);
 
     res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
@@ -121,6 +138,10 @@ export const promoteToRoomAdmin = async (req, res) => {
   const room = req.room;
 
   try {
+    if (!isValidObjectId(userId)) {
+      return res.status(400).json({ message: "A valid userId is required" });
+    }
+
     if (!room.members.some(memberId => memberId.toString() === userId)) {
       return res.status(400).json({ message: "User must be a member of the room to be promoted" });
     }

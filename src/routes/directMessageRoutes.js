@@ -22,6 +22,7 @@ const directMessageRouter = express.Router();
 // Uploads are otherwise size-capped but not frequency-capped - without this,
 // an authenticated user can script unlimited uploads and exhaust disk space.
 const uploadRateLimiter = createRateLimiter({
+  name: "chat-upload",
   windowMs: 15 * 60 * 1000,
   limit: 30,
   message: { message: "Too many uploads, please try again later." },

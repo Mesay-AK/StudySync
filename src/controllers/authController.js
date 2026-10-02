@@ -5,14 +5,31 @@ import {generateRefreshToken,
         validateRefreshToken,
         deleteRefreshToken,
         generatePasswordResetToken,
+        hashResetToken,
+        tokenPayloadFor,
+        isSessionCurrent,
 } from '../utils/Tokens/jwtTokens.js';
 import { setAuthCookies, clearAuthCookies } from '../utils/Tokens/authCookies.js';
 import { sendError } from '../utils/errorResponse.js';
 import { emailQueue } from '../queues/emailQueue.js';
+import { validateNewAccount } from '../utils/validation.js';
+
+const WEAK_PASSWORD_MESSAGE = 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.';
+
+const issueSession = async (res, user) => {
+  const payload = tokenPayloadFor(user);
+  const accessToken = generateAccessToken(payload);
+  const refreshToken = await generateRefreshToken(payload);
+  setAuthCookies(res, accessToken, refreshToken);
+  return accessToken;
+};
 
 export const registerUser = async (req, res) => {
   try {
     const { username, email, password, displayName } = req.body;
+
+    const invalid = validateNewAccount({ username, email, password });
+    if (invalid) return res.status(400).json({ message: invalid });
 
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
@@ -21,7 +38,7 @@ export const registerUser = async (req, res) => {
     }
 
     if (!isStrongPassword(password)) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.' });
+      return res.status(400).json({ message: WEAK_PASSWORD_MESSAGE });
     }
 
     const hashedPassword = await hashPassword(password);
@@ -33,7 +50,7 @@ export const registerUser = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      displayName: displayName || username
+      displayName: typeof displayName === 'string' && displayName ? displayName : username
     });
 
     await newUser.save();
@@ -48,6 +65,10 @@ export const registerUser = async (req, res) => {
 export const logInUser = async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ message: 'Email and password are required.' });
+    }
+
     const user = await User.findOne({ email }).select('+password');
 
     if (!user || !user.password || !(await comparePassword(password, user.password))) {
@@ -59,10 +80,7 @@ export const logInUser = async (req, res) => {
       return res.status(403).json({ message: 'Access denied. You are banned.' });
     }
 
-    const accessToken = generateAccessToken({ userId: user._id, email: user.email});
-    const refreshToken = await generateRefreshToken({ userId: user._id, email: user.email });
-
-    setAuthCookies(res, accessToken, refreshToken);
+    const accessToken = await issueSession(res, user);
 
     return res.status(200).json({ token: accessToken, userId: user._id, displayName: user.displayName });
   } catch (error) {
@@ -86,7 +104,15 @@ export const refreshToken = async (req, res) => {
     // recognized as reuse instead of just "invalid".
     await deleteRefreshToken(decoded.sessionId);
 
-    const payload = { userId: decoded.userId, email: decoded.email };
+    // A refresh token must not outlive the account's standing: deleted,
+    // banned, or credentials changed since it was issued.
+    const user = await User.findById(decoded.userId);
+    if (!user || user.isBanned || !isSessionCurrent(decoded, user)) {
+      clearAuthCookies(res);
+      return res.status(403).json({ message: 'Invalid or expired refresh token' });
+    }
+
+    const payload = tokenPayloadFor(user);
     const newAccessToken = generateAccessToken(payload);
     const newRefreshToken = await generateRefreshToken(payload, decoded.familyId);
 
@@ -120,18 +146,23 @@ export const requestPasswordReset = async (req, res) => {
   const genericResponse = { message: "If that email is registered, a reset link has been sent." };
 
   try {
+    if (typeof email !== 'string' || !email) {
+      return res.status(400).json({ message: 'Email is required.' });
+    }
+
     const user = await User.findOne({ email });
     // Don't reveal whether the email is registered.
     if (!user) return res.status(200).json(genericResponse);
 
     const resetToken = generatePasswordResetToken();
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000;
-    await user.save();
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { resetPasswordToken: hashResetToken(resetToken), resetPasswordExpires: new Date(Date.now() + 3600000) } }
+    );
 
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
     await emailQueue.add("password-reset", {
-      to: email,
+      to: user.email,
       subject: "Password Reset Request",
       html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link expires in 1 hour.</p>`
     });
@@ -146,23 +177,33 @@ export const resetPassword = async (req, res) => {
   const { token, newPassword } = req.body;
 
   try {
-    if (!isStrongPassword(newPassword)) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.' });
+    // Must be a plain string: a JSON object like {"$ne": null} used to be
+    // passed straight into the query and match ANY user's pending token.
+    if (typeof token !== 'string' || !token) {
+      return res.status(400).json({ message: "Invalid or expired token" });
     }
 
-    const user = await User.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ message: WEAK_PASSWORD_MESSAGE });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+
+    // One atomic find-and-consume, so the same token can't be redeemed twice
+    // by concurrent requests. Bumping tokenVersion signs out every existing
+    // session - the point of a reset is usually that someone else may have
+    // the old password.
+    const user = await User.findOneAndUpdate(
+      { resetPasswordToken: hashResetToken(token), resetPasswordExpires: { $gt: new Date() } },
+      {
+        $set: { password: hashedPassword, resetPasswordToken: null, resetPasswordExpires: null },
+        $inc: { tokenVersion: 1 },
+      }
+    );
 
     if (!user) {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
-
-    user.password = await hashPassword(newPassword);
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
 
     res.status(200).json({ message: "Password reset successfully" });
   } catch (error) {
@@ -182,18 +223,23 @@ export const changePassword = async (req, res) => {
 
   try {
     if (!isStrongPassword(newPassword)) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.' });
+      return res.status(400).json({ message: WEAK_PASSWORD_MESSAGE });
     }
 
     const user = await User.findById(req.user.id).select('+password');
-    if (!user.password || !(await comparePassword(currentPassword, user.password))) {
+    if (!user.password || typeof currentPassword !== 'string' || !(await comparePassword(currentPassword, user.password))) {
       return res.status(401).json({ message: 'Current password is incorrect' });
     }
 
     user.password = await hashPassword(newPassword);
+    // Signs out every other session; the caller gets a fresh one below so
+    // changing your password doesn't log you out of the tab you did it in.
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
-    res.status(200).json({ message: 'Password updated successfully' });
+    const token = await issueSession(res, user);
+
+    res.status(200).json({ message: 'Password updated successfully', token });
   } catch (error) {
     return sendError(res, error, "Failed to change password. Please try again.");
   }

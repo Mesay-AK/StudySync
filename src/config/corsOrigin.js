@@ -16,5 +16,8 @@ export const corsOrigin = (origin, callback) => {
     return callback(null, true);
   }
 
-  callback(new Error(`Origin ${origin} not allowed by CORS`));
+  // Not an Error: that bubbled to the global error handler as a 500 (and an
+  // error log line) for every request from a foreign origin. Answering with no
+  // CORS headers is enough - the browser blocks the response itself.
+  callback(null, false);
 };

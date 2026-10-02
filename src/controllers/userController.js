@@ -3,12 +3,30 @@ import User from "../models/User.js";
 import { sendError } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
 import { clampPagination } from "../utils/pagination.js";
+import { isValidObjectId } from "mongoose";
+import { removeUserFromAllRooms } from "../utils/roomMembership.js";
+import { disconnectUser } from "../utils/socketHandlers/safeOn.js";
+
+// What any logged-in user may see about someone else. Email, block list,
+// settings and admin/ban flags used to be returned to everyone by profile and
+// search lookups.
+export const PUBLIC_USER_FIELDS = "username displayName profilePicture bio onlineStatus lastSeen createdAt";
+
+// Account deletion used to leave the user listed in rooms' members/admins
+// (possibly leaving a room with no admin) and in other users' block lists,
+// and their open sockets connected.
+export const purgeUserReferences = async (io, userId) => {
+  await removeUserFromAllRooms(userId);
+  await User.updateMany({ blockedUsers: userId }, { $pull: { blockedUsers: userId } });
+  disconnectUser(io, userId);
+};
 
 
 export const getUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findById(userId).select("-password");
+    const isSelfOrAdmin = req.user.id === userId || req.user.isAdmin;
+    const user = await User.findById(userId).select(isSelfOrAdmin ? "" : PUBLIC_USER_FIELDS);
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -33,15 +51,21 @@ export const updateUserProfile = async (req, res) => {
       "onlineStatus"
     ];
 
+    for (const key of allowedUpdates) {
+      if (updates[key] !== undefined && typeof updates[key] !== "string") {
+        return res.status(400).json({ message: `${key} must be a string.` });
+      }
+    }
+    if (updates.email === "" || updates.username === "") {
+      return res.status(400).json({ message: "Email and username can't be empty." });
+    }
+
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    for (let key of allowedUpdates) {
-      if (updates[key] !== undefined) {
-        user[key] = updates[key];
-      }
-    }
-
+    // Compared against the CURRENT values, before any assignment below -
+    // these checks used to run after the loop had already copied the new
+    // values onto `user`, so they never fired.
     if (updates.email && updates.email !== user.email) {
       const existing = await User.findOne({ email: updates.email });
       if (existing) return res.status(400).json({ message: "Email already in use" });
@@ -50,6 +74,12 @@ export const updateUserProfile = async (req, res) => {
     if (updates.username && updates.username !== user.username) {
       const existing = await User.findOne({ username: updates.username });
       if (existing) return res.status(400).json({ message: "Username already in use" });
+    }
+
+    for (const key of allowedUpdates) {
+      if (updates[key] !== undefined) {
+        user[key] = updates[key];
+      }
     }
 
     await user.save();
@@ -66,6 +96,7 @@ export const deleteProfile = async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
+    await purgeUserReferences(req.app.get("io"), userId);
     res.status(200).json({ message: "User profile deleted successfully" });
   } catch (error) {
     return sendError(res, error, "Failed to delete user profile.");
@@ -174,7 +205,9 @@ export const blockUser = async (req, res) => {
     const { targetUserId } = req.body;
 
     if (!targetUserId) return res.status(400).json({ message: "Target user ID is required" });
+    if (!isValidObjectId(targetUserId)) return res.status(400).json({ message: "Invalid target user ID" });
     if (targetUserId === userId) return res.status(400).json({ message: "You cannot block yourself" });
+    if (!(await User.exists({ _id: targetUserId }))) return res.status(404).json({ message: "User to block not found" });
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -197,7 +230,7 @@ export const blockUser = async (req, res) => {
 export const getBlockedUsers = async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findById(userId).select("blockedUsers").populate("blockedUsers", "-password");
+    const user = await User.findById(userId).select("blockedUsers").populate("blockedUsers", PUBLIC_USER_FIELDS);
     if (!user) return res.status(404).json({ message: "User not found" });
     res.status(200).json(user.blockedUsers);
   }
@@ -239,14 +272,18 @@ export const searchUsers = async (req, res) => {
     if (!query) return res.status(400).json({ message: "Query is required" });
 
     const safeQuery = escapeRegex(query);
+    // Email is matched exactly (not as a substring), so search can still find
+    // someone by their full address without becoming an oracle for guessing
+    // other users' emails one character at a time - and it isn't returned.
     const users = await User.find({
       $or: [
         { username: { $regex: safeQuery, $options: "i" } },
         { displayName: { $regex: safeQuery, $options: "i" } },
-        { email: { $regex: safeQuery, $options: "i" } }
-
+        { email: { $regex: `^${safeQuery}$`, $options: "i" } }
       ]
-    }).select("-password");
+    })
+      .select(PUBLIC_USER_FIELDS)
+      .limit(50);
 
     res.status(200).json(users);
   } catch (error) {
@@ -271,11 +308,21 @@ export const updateUserSettings = async (req, res) => {
   try {
     const { userId } = req.params;
     const { settings } = req.body;
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      return res.status(400).json({ message: "settings must be an object." });
+    }
+    if (settings.darkMode !== undefined && typeof settings.darkMode !== "boolean") {
+      return res.status(400).json({ message: "darkMode must be true or false." });
+    }
+    if (settings.language !== undefined && typeof settings.language !== "string") {
+      return res.status(400).json({ message: "language must be a string." });
+    }
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.settings = { ...user.settings, ...settings };
+    if (settings.darkMode !== undefined) user.settings.darkMode = settings.darkMode;
+    if (settings.language !== undefined) user.settings.language = settings.language;
     await user.save();
 
     res.status(200).json(user.settings);

@@ -12,7 +12,6 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import helmet from 'helmet';
-import { createRateLimiter } from './config/rateLimiter.js';
 import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
 import connectDB from './config/db.js';
@@ -38,6 +37,8 @@ import announcementRouter from './routes/announcementRoutes.js';
 import contactRouter from './routes/contactRoutes.js';
 import setupSocket from './config/socket.js';
 import { corsOrigin } from './config/corsOrigin.js';
+import { authenticate } from './middleware/authMiddleware.js';
+import { rejectOperatorKeys } from './middleware/requestGuards.js';
 import './queues/emailWorker.js';
 
 // Refuse to boot with unset or copy-pasted-from-.env.example secrets - signing
@@ -86,9 +87,15 @@ app.use(pinoHttp({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(rejectOperatorKeys);
 app.use(passport.initialize());
+// Uploads (including private DM attachments) used to be readable by anyone
+// on the internet who had the URL. They now require a logged-in user - the
+// browser sends the httpOnly auth cookie on <img>/<video>/<a> requests to
+// this origin, so the frontend's existing markup keeps working unchanged.
 app.use(
   '/uploads',
+  authenticate,
   // Uploaded attachments need to render inside the frontend's own preview
   // iframe/lightbox - a different origin from the API even in dev. Helmet's
   // global X-Frame-Options/frame-ancestors above are right for the app's
@@ -107,20 +114,15 @@ app.use(
 // them). A real "Download" action needs Content-Disposition: attachment,
 // which res.download() sets automatically - path.basename() strips any
 // directory component so this can't be used to read files outside uploads/.
-app.get('/uploads/:filename/download', (req, res) => {
+app.get('/uploads/:filename/download', authenticate, (req, res) => {
   const filePath = path.join(path.resolve(), 'uploads', path.basename(req.params.filename));
   res.download(filePath, (err) => {
     if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
   });
 });
 
-const authRateLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  message: { message: 'Too many attempts, please try again later.' },
-});
-
-app.use('/api/auth', authRateLimiter, authRouter);
+// Rate limiting for credential endpoints lives in authRoutes.js.
+app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
 app.use('/api/messages', directMessageRouter);
 app.use('/api/chatrooms', chatRoomRouter);

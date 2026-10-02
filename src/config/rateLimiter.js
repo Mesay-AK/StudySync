@@ -15,12 +15,20 @@ import redisClient from "./redisClient.js";
 // but express-rate-limit's own ERR_ERL_CREATED_IN_REQUEST_HANDLER check
 // rejects constructing a limiter from inside a request handler at all,
 // even a cached one - so that isn't a viable workaround.)
-export const createRateLimiter = (options) =>
-  rateLimit({
+//
+// `name` must be unique per limiter: it becomes the Redis key prefix. Every
+// limiter used to share rate-limit-redis's default "rl:" prefix, so they all
+// counted into ONE per-IP key - e.g. 21 chat uploads exhausted the login
+// limit (20) for that IP.
+export const createRateLimiter = ({ name, ...options }) => {
+  if (!name) throw new Error("createRateLimiter requires a unique `name`");
+  return rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     store: new RedisStore({
+      prefix: `rl:${name}:`,
       sendCommand: (...args) => redisClient.call(...args),
     }),
     ...options,
   });
+};

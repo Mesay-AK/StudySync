@@ -1,8 +1,8 @@
 import DirectMessage from "../../models/DirectMessage.js";
 import { isUserOnline } from "./userHandlers.js";
 import { createAndSendNotification } from "./notificationHandlers.js"
-import emojiRegex from "emoji-regex";
-import User from "../../models/User.js";
+import { prepareDirectMessage } from "../directMessageRules.js";
+import { safeOn, payloadOf } from "./safeOn.js";
 import logger from "../logger.js";
 
 /**
@@ -13,42 +13,19 @@ import logger from "../logger.js";
 const handleDirectMessages = (socket, io) => {
   const sender = socket.userId;
 
-  socket.on("sendDirectMessage", async ({ receiver, content, media }) => {
+  safeOn(socket, "sendDirectMessage", async (payload) => {
+    const { receiver, content, media } = payloadOf(payload);
     try {
-      if (!receiver || (!content?.trim() && !media)) {
-        return socket.emit("error", { message: "Invalid message data." });
-      }
+      const prepared = await prepareDirectMessage({ senderId: sender, receiverId: receiver, content, media });
+      if (prepared.silent) return; // Sender is blocked - telling them would leak the block
+      if (prepared.error) return socket.emit("error", { message: prepared.error });
 
-      const receiverUser = await User.findById(receiver);
-      if (!receiverUser) {
-        return socket.emit("error", { message: "That user no longer exists." });
-      }
-      if (receiverUser.blockedUsers.includes(sender)) {
-        return; // Silently ignore if sender is blocked - telling them would leak the block
-      }
-
-      const messageData = {
-        sender,
-        receiver,
-        content: content || "",
-        status: "sent",
-      };
-      if (media) {
-        messageData.media = media;
-        messageData.type = media.type || "file";
-      }
-
-      // Extract emojis if any
-      const regex = emojiRegex();
-      const emojis = content ? [...content.matchAll(regex)].map(match => match[0]) : [];
-      if (emojis.length > 0) messageData.emojis = emojis;
-
-      const newMessage = new DirectMessage(messageData);
+      const newMessage = new DirectMessage(prepared.message);
 
       // Check online status - cluster-aware via io.in(userId).fetchSockets(),
       // so this is correct even if the receiver is connected to a different
       // app instance than the sender.
-      const receiverOnline = await isUserOnline(io, receiver);
+      const receiverOnline = await isUserOnline(io, String(receiver));
 
       if (receiverOnline) {
         newMessage.status = "delivered";
@@ -62,15 +39,15 @@ const handleDirectMessages = (socket, io) => {
         // Emitting to the per-user room (joined in userHandlers.js on
         // connect) reaches every socket that user has open, not just
         // whichever one happened to connect first.
-        io.to(receiver).emit("receiveDirectMessage", newMessage);
+        io.to(String(receiver)).emit("receiveDirectMessage", newMessage);
 
         // Notify the recipient in real-time
         await createAndSendNotification({
           io,
           type: "direct_message",
-          recipientId: receiver,
+          recipientId: String(receiver),
           senderId: sender,
-          content,
+          content: newMessage.content,
         });
       }
 
@@ -81,7 +58,8 @@ const handleDirectMessages = (socket, io) => {
     }
   });
 
-  socket.on("markAsRead", async ({ messageId }) => {
+  safeOn(socket, "markAsRead", async (payload) => {
+    const { messageId } = payloadOf(payload);
     try {
       const message = await DirectMessage.findById(messageId);
       if (!message || message.status === "read") return;
@@ -90,9 +68,10 @@ const handleDirectMessages = (socket, io) => {
       }
 
       message.status = "read";
+      message.readAt = new Date();
       await message.save();
 
-      io.to(message.sender.toString()).emit("messageRead", { messageId });
+      io.to(message.sender.toString()).emit("messageRead", { messageId: message._id.toString() });
     } catch (err) {
       logger.error({ err, sender }, "markAsRead error");
       socket.emit("error", { message: "Failed to mark message as read." });

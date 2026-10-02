@@ -16,4 +16,12 @@ const reportSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// "Already reported" used to be a check-then-insert, so concurrent duplicate
+// reports all passed the check. Enforced by the database instead; resolved
+// reports drop out of the index so the same target can be reported again.
+reportSchema.index(
+  { reportedBy: 1, type: 1, targetUser: 1, targetMessage: 1 },
+  { unique: true, partialFilterExpression: { status: "pending" } }
+);
+
 export default mongoose.model("Report", reportSchema);
