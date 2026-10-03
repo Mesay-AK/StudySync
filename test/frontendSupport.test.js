@@ -191,3 +191,52 @@ describe("PATCH /notifications/read-all", () => {
     expect((await api(`/notifications/${notif._id}/read`, { method: "PATCH", token: stranger.token })).status).toBe(404);
   });
 });
+
+describe("room invitations appear in notifications", () => {
+  const invite = (owner, room, users) =>
+    api(`/chatrooms/invite/${room._id}`, { method: "POST", token: owner.token, body: { userIds: users.map((u) => u.id) } });
+  const invitesFor = async (u, roomId) =>
+    (await api("/notifications", { token: u.token })).body.filter((n) => n.type === "room_invite" && n.metadata?.roomId === roomId);
+
+  it("notifies the invitee (live if online) with the room's id and name", async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    const room = await createRoom(owner, { type: "private" });
+    const s = await connectSocket(invitee.token);
+    sockets.push(s);
+    const live = nextEvent(s, "newNotification");
+
+    await invite(owner, room, [invitee]);
+
+    const n = await live;
+    expect(n).toMatchObject({ type: "room_invite", sender: owner.id, isRead: false, metadata: { roomId: room._id, roomName: room.name } });
+    expect(await invitesFor(invitee, room._id)).toHaveLength(1);
+    expect(await invitesFor(owner, room._id)).toHaveLength(0);
+  });
+
+  it("is stored for an offline invitee too", async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    const room = await createRoom(owner, { type: "private" });
+    await invite(owner, room, [invitee]);
+    expect(await invitesFor(invitee, room._id)).toHaveLength(1);
+  });
+
+  it("re-inviting someone already invited does not notify them again", async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    const room = await createRoom(owner, { type: "private" });
+    await invite(owner, room, [invitee]);
+    await invite(owner, room, [invitee]);
+    expect(await invitesFor(invitee, room._id)).toHaveLength(1);
+  });
+
+  it("does not notify an invitee who has blocked the inviter", async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    await api("/user/block", { method: "POST", token: invitee.token, body: { targetUserId: owner.id } });
+    const room = await createRoom(owner, { type: "private" });
+    await invite(owner, room, [invitee]);
+    expect(await invitesFor(invitee, room._id)).toHaveLength(0);
+  });
+});

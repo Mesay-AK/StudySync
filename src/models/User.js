@@ -5,6 +5,10 @@ const { Schema, model } = mongoose;
 // Must match the frontend's LANGUAGES (src/lib/preferences.js).
 export const SUPPORTED_LANGUAGES = ["en", "es", "fr", "am", "ar"];
 
+// Who may see a user's full profile (controllers/userController.js):
+// everyone logged in / people they share a room or conversation with / only them.
+export const PROFILE_VISIBILITY = ["everyone", "connections", "private"];
+
 const userSchema = Schema(
   {
     // lowercase/trim are a backstop - callers normalize explicitly via
@@ -38,6 +42,7 @@ const userSchema = Schema(
       // Dark is the app's original (and default) look; false = light theme.
       darkMode: { type: Boolean, default: true },
       language: { type: String, enum: SUPPORTED_LANGUAGES, default: "en" },
+      profileVisibility: { type: String, enum: PROFILE_VISIBILITY, default: "connections" },
     }
 
   },

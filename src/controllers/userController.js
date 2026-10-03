@@ -7,12 +7,41 @@ import { isValidObjectId } from "mongoose";
 import { removeUserFromAllRooms } from "../utils/roomMembership.js";
 import { disconnectUser } from "../utils/socketHandlers/safeOn.js";
 import { normalizeEmail } from "../utils/validation.js";
-import { SUPPORTED_LANGUAGES } from "../models/User.js";
+import { SUPPORTED_LANGUAGES, PROFILE_VISIBILITY } from "../models/User.js";
+import ChatRoom from "../models/ChatRoom.js";
+import DirectMessage from "../models/DirectMessage.js";
+import Material from "../models/Material.js";
 
 // What any logged-in user may see about someone else. Email, block list,
 // settings and admin/ban flags used to be returned to everyone by profile and
 // search lookups.
 export const PUBLIC_USER_FIELDS = "username displayName profilePicture bio onlineStatus lastSeen createdAt";
+
+// The minimum anyone logged in can see about anyone - what chats, member
+// lists and search results need. Everything else in PUBLIC_USER_FIELDS is
+// subject to the owner's profileVisibility setting.
+export const CARD_FIELDS = "username displayName profilePicture onlineStatus";
+
+// "connections": people who share a (non-deleted) room or have exchanged a
+// direct message.
+const areConnected = async (a, b) =>
+  Boolean(
+    (await ChatRoom.exists({ isDeleted: false, members: { $all: [a, b] } })) ||
+    (await DirectMessage.exists({
+      isDeleted: false,
+      $or: [{ sender: a, receiver: b }, { sender: b, receiver: a }],
+    }))
+  );
+
+const canSeeFullProfile = async (viewer, target) => {
+  // Someone who blocked you looks exactly like a private profile - the
+  // response must not reveal the block.
+  if (target.blockedUsers?.some((id) => id.equals(viewer._id))) return false;
+  const visibility = target.settings?.profileVisibility ?? "connections";
+  if (visibility === "everyone") return true;
+  if (visibility === "connections") return areConnected(viewer._id, target._id);
+  return false;
+};
 
 // Account deletion used to leave the user listed in rooms' members/admins
 // (possibly leaving a room with no admin) and in other users' block lists,
@@ -28,11 +57,39 @@ export const getUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
     const isSelfOrAdmin = req.user.id === userId || req.user.isAdmin;
-    const user = await User.findById(userId).select(isSelfOrAdmin ? "" : PUBLIC_USER_FIELDS);
+    if (isSelfOrAdmin) {
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      return res.status(200).json(user);
+    }
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const target = await User.findById(userId).select(`${PUBLIC_USER_FIELDS} blockedUsers settings.profileVisibility`);
+    if (!target) return res.status(404).json({ message: "User not found" });
 
-    res.status(200).json(user);
+    const card = {
+      _id: target._id,
+      username: target.username,
+      displayName: target.displayName,
+      profilePicture: target.profilePicture,
+      onlineStatus: target.onlineStatus,
+    };
+
+    if (!(await canSeeFullProfile(req.user, target))) {
+      return res.status(200).json({ ...card, profileVisible: false });
+    }
+
+    const [roomsJoined, materialsShared] = await Promise.all([
+      ChatRoom.countDocuments({ members: target._id, isDeleted: false }),
+      Material.countDocuments({ uploader: target._id, isDeleted: false }),
+    ]);
+    res.status(200).json({
+      ...card,
+      bio: target.bio,
+      lastSeen: target.lastSeen,
+      createdAt: target.createdAt,
+      stats: { roomsJoined, materialsShared },
+      profileVisible: true,
+    });
   } catch (error) {
     return sendError(res, error, "Failed to fetch user profile.");
   }
@@ -241,7 +298,7 @@ export const blockUser = async (req, res) => {
 export const getBlockedUsers = async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findById(userId).select("blockedUsers").populate("blockedUsers", PUBLIC_USER_FIELDS);
+    const user = await User.findById(userId).select("blockedUsers").populate("blockedUsers", CARD_FIELDS);
     if (!user) return res.status(404).json({ message: "User not found" });
     res.status(200).json(user.blockedUsers);
   }
@@ -293,7 +350,9 @@ export const searchUsers = async (req, res) => {
         { email: { $regex: `^${safeQuery}$`, $options: "i" } }
       ]
     })
-      .select(PUBLIC_USER_FIELDS)
+      // Card fields only: bio/last seen/joined date follow each user's
+      // profile visibility setting, which search used to bypass.
+      .select(CARD_FIELDS)
       .limit(50);
 
     res.status(200).json(users);
@@ -328,12 +387,16 @@ export const updateUserSettings = async (req, res) => {
     if (settings.language !== undefined && !SUPPORTED_LANGUAGES.includes(settings.language)) {
       return res.status(400).json({ message: "Unsupported language." });
     }
+    if (settings.profileVisibility !== undefined && !PROFILE_VISIBILITY.includes(settings.profileVisibility)) {
+      return res.status(400).json({ message: "Unsupported profile visibility." });
+    }
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     if (settings.darkMode !== undefined) user.settings.darkMode = settings.darkMode;
     if (settings.language !== undefined) user.settings.language = settings.language;
+    if (settings.profileVisibility !== undefined) user.settings.profileVisibility = settings.profileVisibility;
     await user.save();
 
     res.status(200).json(user.settings);

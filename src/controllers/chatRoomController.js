@@ -11,6 +11,7 @@ import { escapeHtml } from "../utils/escapeHtml.js";
 import { clampPagination } from "../utils/pagination.js";
 import { isNonEmptyString, isOptionalString, isStringArray } from "../utils/validation.js";
 import { joinRoomAtomically, leaveRoomAtomically } from "../utils/roomMembership.js";
+import { createAndSendNotification } from "../utils/socketHandlers/notificationHandlers.js";
 
 const isMemberOf = (room, userId) => room.members.some((m) => m.toString() === userId);
 
@@ -270,6 +271,22 @@ export const inviteUsers = async (req, res) => {
           to: user.email,
           subject: `You're invited to join the room: ${room.name}`,
           html: `<p>You have been invited to join the room: <strong>${safeName}</strong></p><p><a href="${roomLink}">Open the room</a> to accept the invitation.</p>`,
+        })
+      )
+    );
+
+    // In-app notification too (invites used to be email-only, so nobody saw
+    // them inside StudySync). Live if the invitee is online; skipped if they
+    // blocked the inviter. Only for NEW invites - re-inviting doesn't repeat.
+    await Promise.all(
+      newInvites.map((user) =>
+        createAndSendNotification({
+          io: req.app.get("io"),
+          type: "room_invite",
+          recipientId: String(user._id),
+          senderId: req.user.id,
+          content: `You've been invited to join ${room.name}`,
+          metadata: { roomId: String(room._id), roomName: room.name },
         })
       )
     );

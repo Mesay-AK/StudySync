@@ -7,7 +7,7 @@ const notificationSchema = new Schema({
   content: { type: String, default: "" },
   metadata: { type: Schema.Types.Mixed, default: {} },
   isRead: { type: Boolean, default: false },
-  type: { type: String, enum: ["direct_message", "room_message", "request", "other"], default: "other" },
+  type: { type: String, enum: ["direct_message", "room_message", "room_invite", "request", "other"], default: "other" },
 }, { timestamps: true });
 
 notificationSchema.index({ recipient: 1, updatedAt: -1 });
