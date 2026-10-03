@@ -54,7 +54,10 @@ export default async function setup({ provide }) {
   const logFile = path.join(workDir, "server.log");
   const logStream = fs.createWriteStream(logFile);
 
-  const child = spawn(process.execPath, [path.join(backendRoot, "src/index.js")], {
+  // TEST_SERVER_ENTRY=dist/server.js runs the whole suite against the
+  // production bundle (npm run build) instead of the source.
+  const entry = path.join(backendRoot, process.env.TEST_SERVER_ENTRY || "src/index.js");
+  const child = spawn(process.execPath, ["--enable-source-maps", entry], {
     cwd: workDir,
     env: {
       PATH: process.env.PATH,

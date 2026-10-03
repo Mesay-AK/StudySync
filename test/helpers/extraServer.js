@@ -25,7 +25,8 @@ export const startExtraServer = async () => {
   const port = await freePort();
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "studysync-e2e-b-"));
   const mainBase = inject("baseUrl");
-  const child = spawn(process.execPath, [path.join(backendRoot, "src/index.js")], {
+  const entry = path.join(backendRoot, process.env.TEST_SERVER_ENTRY || "src/index.js");
+  const child = spawn(process.execPath, ["--enable-source-maps", entry], {
     cwd: workDir,
     env: {
       PATH: process.env.PATH,
