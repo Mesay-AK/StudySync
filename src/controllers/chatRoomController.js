@@ -5,7 +5,7 @@ import { emailQueue } from "../queues/emailQueue.js";
 import Report from "../models/Report.js";
 import { isValidObjectId } from "mongoose";
 import { logActivity } from "../utils/activityLogger.js";
-import { sendError } from "../utils/errorResponse.js";
+import { sendError, errorBody } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
 import { escapeHtml } from "../utils/escapeHtml.js";
 import { clampPagination } from "../utils/pagination.js";
@@ -25,7 +25,7 @@ const respondToJoin = async (res, result, { userId, notFoundStatus, notFoundMess
       user: userId,
       type: "room_joined",
       description: `Joined the study room "${result.room.name}"`,
-      metadata: { roomId: result.room._id },
+      metadata: { roomId: result.room._id, name: result.room.name },
     });
   }
   return res.status(200).json({ message: successMessage, room: result.room });
@@ -50,6 +50,23 @@ export const getMyRooms = async (req, res) => {
     res.status(200).json(rooms);
   } catch (error) {
     return sendError(res, error, "Failed to fetch your rooms.");
+  }
+};
+
+// Private rooms the caller has been invited to but hasn't joined yet - the
+// only way an invitee can find the room (it's not in the public list, and
+// they aren't a member yet).
+export const getInvitedRooms = async (req, res) => {
+  try {
+    const rooms = await ChatRoom.find({
+      type: "private",
+      isDeleted: false,
+      invitedUsers: req.user.id,
+      members: { $ne: req.user.id },
+    }).select("-invitedUsers");
+    res.status(200).json(rooms);
+  } catch (error) {
+    return sendError(res, error, "Failed to fetch your invitations.");
   }
 };
 
@@ -125,6 +142,8 @@ export const getRoomById = async (req, res) => {
       ...roomData,
       invitedUsers: isMember ? invitedUsers : undefined,
       isMember,
+      // Lets the room page offer "Join" to an invitee of a private room.
+      isInvited: Boolean(isInvited),
       isAdmin: room.admins.some((a) => a._id.toString() === userId),
     });
   } catch (error) {
@@ -170,7 +189,7 @@ export const createRoom = async (req, res) => {
       user: creatorId,
       type: "room_created",
       description: `Created the study room "${savedRoom.name}"`,
-      metadata: { roomId: savedRoom._id },
+      metadata: { roomId: savedRoom._id, name: savedRoom.name },
     });
 
     res.status(201).json(savedRoom);
@@ -244,12 +263,13 @@ export const inviteUsers = async (req, res) => {
     // The room name is user-controlled; unescaped, a room named like an
     // <a href> became a working link in an email sent from our domain.
     const safeName = escapeHtml(room.name);
+    const roomLink = `${process.env.FRONTEND_URL}/user/room/${room._id}`;
     await Promise.all(
       newInvites.map((user) =>
         emailQueue.add("room-invite", {
           to: user.email,
           subject: `You're invited to join the room: ${room.name}`,
-          html: `<p>You have been invited to join the room: <strong>${safeName}</strong></p>`,
+          html: `<p>You have been invited to join the room: <strong>${safeName}</strong></p><p><a href="${roomLink}">Open the room</a> to accept the invitation.</p>`,
         })
       )
     );
@@ -455,7 +475,11 @@ export const updateRoom = async (req, res) => {
     if (maxParticipants !== undefined) {
       const max = Number(maxParticipants);
       if (!Number.isFinite(max) || max < room.members.length) {
-        return res.status(400).json({ message: `Max participants can't be less than the current member count (${room.members.length})` });
+        return res.status(400).json(errorBody(
+          `Max participants can't be less than the current member count (${room.members.length})`,
+          'MAX_BELOW_MEMBERS',
+          { count: room.members.length }
+        ));
       }
       room.maxParticipants = max;
     }
@@ -506,7 +530,7 @@ export const leaveRoom = async (req, res) => {
           user: userId,
           type: "room_left",
           description: `Left the study room "${room.name}"`,
-          metadata: { roomId: room._id },
+          metadata: { roomId: room._id, name: room.name },
         });
 
         res.status(200).json({ message: "Left room successfully", room });

@@ -7,6 +7,7 @@ import { escapeRegex } from "../utils/escapeRegex.js";
 import { clampPagination } from "../utils/pagination.js";
 import { prepareDirectMessage } from "../utils/directMessageRules.js";
 import { isNonEmptyString } from "../utils/validation.js";
+import Upload from "../models/Upload.js";
 
 // Summarizes each conversation the user is part of: the other participant,
 // the last message, and how many are unread - what a conversation list needs.
@@ -121,9 +122,15 @@ export const searchDirectMessages = async (req, res) => {
   }
 };
 
-export const uploadMedia = (req, res) => {
+export const uploadMedia = async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
+  }
+
+  try {
+    await Upload.create({ filename: req.file.filename, uploader: req.user._id, purpose: "chat" });
+  } catch (error) {
+    return sendError(res, error, "Failed to save the upload.");
   }
 
   const fileUrl = `${process.env.BASE_URL}/uploads/${req.file.filename}`;
@@ -258,6 +265,12 @@ export const markConversationAsSeen = async (req, res) => {
       { $set: { status: 'read', readAt: new Date() } }
     );
 
+    // Tell the other person their messages were read, so their ticks update
+    // live (this REST path used to update the DB silently).
+    if (updated.modifiedCount > 0) {
+      req.app.get("io")?.to(String(senderId)).emit("conversationRead", { readerId: receiverId });
+    }
+
     res.status(200).json({ message: "Conversation marked as seen", updatedCount: updated.modifiedCount });
   } catch (error) {
     return sendError(res, error, "Failed to mark conversation as seen.");
@@ -310,11 +323,18 @@ export const getUnreadMessages = async (req, res) => {
   const userId = req.user.id;
 
   try {
+    // Paginated (it used to return every unread message ever) and without
+    // messages from people the user has blocked.
+    const { skip, limit } = clampPagination(req.query.page, req.query.limit ?? 50);
     const unread = await DirectMessage.find({
       receiver: userId,
       status: { $ne: 'read' },
       isDeleted: false,
-    }).sort({ createdAt: -1 });
+      sender: { $nin: req.user.blockedUsers },
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     res.status(200).json(unread);
   } catch (error) {

@@ -63,13 +63,17 @@ export const verifyAccessToken = (token) => {
   }
 };
 
-export const validateRefreshToken = async (refreshToken) => {
-  let decoded;
+// Signature/expiry only - no Redis checks.
+export const verifyRefreshSignature = (refreshToken) => {
   try {
-    decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'] });
+    return jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'] });
   } catch (error) {
     throw new Error('Invalid or expired refresh token');
   }
+};
+
+export const validateRefreshToken = async (refreshToken) => {
+  const decoded = verifyRefreshSignature(refreshToken);
 
   const { sessionId, familyId } = decoded;
 

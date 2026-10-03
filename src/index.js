@@ -21,7 +21,7 @@ import pinoHttp from 'pino-http';
 import path from 'path';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
-import { sendError } from './utils/errorResponse.js';
+import { sendError, errorBody } from './utils/errorResponse.js';
 import logger from './utils/logger.js';
 
 import authRouter from './routes/authRoutes.js';
@@ -39,6 +39,7 @@ import setupSocket from './config/socket.js';
 import { corsOrigin } from './config/corsOrigin.js';
 import { authenticate } from './middleware/authMiddleware.js';
 import { rejectOperatorKeys } from './middleware/requestGuards.js';
+import { authorizeUpload } from './middleware/uploadAccess.js';
 import './queues/emailWorker.js';
 
 // Refuse to boot with unset or copy-pasted-from-.env.example secrets - signing
@@ -89,13 +90,28 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(rejectOperatorKeys);
 app.use(passport.initialize());
+// Static /uploads serves files inline (the browser decides how to render
+// them). A real "Download" action needs Content-Disposition: attachment,
+// which res.download() sets automatically - path.basename() strips any
+// directory component so this can't be used to read files outside uploads/.
+// Registered before the static mount below, which would otherwise treat
+// "download" as the filename and reject it.
+app.get('/uploads/:filename/download', authenticate, authorizeUpload, (req, res) => {
+  const filePath = path.join(path.resolve(), 'uploads', path.basename(req.params.filename));
+  res.download(filePath, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
+  });
+});
+
 // Uploads (including private DM attachments) used to be readable by anyone
-// on the internet who had the URL. They now require a logged-in user - the
+// on the internet who had the URL. They now require a logged-in user who is
+// allowed to see that particular file (authorizeUpload) - the
 // browser sends the httpOnly auth cookie on <img>/<video>/<a> requests to
 // this origin, so the frontend's existing markup keeps working unchanged.
 app.use(
   '/uploads',
   authenticate,
+  authorizeUpload,
   // Uploaded attachments need to render inside the frontend's own preview
   // iframe/lightbox - a different origin from the API even in dev. Helmet's
   // global X-Frame-Options/frame-ancestors above are right for the app's
@@ -109,17 +125,6 @@ app.use(
   },
   express.static(path.join(path.resolve(), 'uploads'))
 );
-
-// Static /uploads serves files inline (the browser decides how to render
-// them). A real "Download" action needs Content-Disposition: attachment,
-// which res.download() sets automatically - path.basename() strips any
-// directory component so this can't be used to read files outside uploads/.
-app.get('/uploads/:filename/download', authenticate, (req, res) => {
-  const filePath = path.join(path.resolve(), 'uploads', path.basename(req.params.filename));
-  res.download(filePath, (err) => {
-    if (err && !res.headersSent) res.status(404).json({ message: 'File not found' });
-  });
-});
 
 // Rate limiting for credential endpoints lives in authRoutes.js.
 app.use('/api/auth', authRouter);
@@ -175,7 +180,21 @@ app.use((err, req, res, next) => {
     return res.status(401).json({ message: 'Your session is invalid or has expired. Please log in again.' });
   }
 
-  return sendError(res, err, err.message || 'Something went wrong. Please try again.', err.status || 500);
+  // Body-parser failures: a fixed, translatable message instead of the
+  // parser's own technical text ("Unexpected token } in JSON at ...").
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json(errorBody('The request was not valid JSON.', 'MALFORMED_JSON'));
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json(errorBody('That request is too large.', 'PAYLOAD_TOO_LARGE'));
+  }
+
+  // A 4xx error's message was written for the client (e.g. the upload
+  // filters' "Invalid file type!"). A 5xx one is internal - it used to be
+  // passed straight to the user; now it's logged and replaced.
+  const status = err.status || err.statusCode || 500;
+  const clientMessage = status < 500 && err.message ? err.message : 'Something went wrong. Please try again.';
+  return sendError(res, err, clientMessage, status);
 });
 
 const PORT = process.env.PORT || 3002;

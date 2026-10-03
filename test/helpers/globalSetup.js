@@ -79,6 +79,8 @@ export default async function setup({ provide }) {
       GOOGLE_CLIENT_ID: "test",
       GOOGLE_CLIENT_SECRET: "test",
       GOOGLE_CALLBACK_URL: `${baseUrl}/api/auth/google/callback`,
+      // Short, so tests can step past the refresh-token reuse grace window.
+      REFRESH_REUSE_GRACE_SECONDS: "2",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

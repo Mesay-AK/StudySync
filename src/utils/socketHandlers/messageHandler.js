@@ -2,12 +2,54 @@ import Message from "../../models/Message.js";
 import ChatRoom from "../../models/ChatRoom.js";
 import DirectMessage from "../../models/DirectMessage.js";
 import Notification from "../../models/Notification.js";
+import mongoose from "mongoose";
 import emojiRegex from "emoji-regex";
 import User from "../../models/User.js";
 import { clampPagination } from "../pagination.js";
 import { normalizeMedia } from "../mediaValidation.js";
 import { safeOn, payloadOf } from "./safeOn.js";
 import logger from "../logger.js";
+
+// One notification per message per member flooded everyone's list in busy
+// rooms. Instead:
+//   - members currently viewing the room get none (they see it live);
+//   - everyone else has ONE unread notification per room, updated in place
+//     ("3 new messages") and moved to the top, until they read it.
+const notifyRoomMembers = async ({ io, room, sender, content, recipientIds }) => {
+  const roomId = room._id.toString();
+  const viewers = new Set((await io.in(roomId).fetchSockets()).map((s) => s.userId));
+  const targets = recipientIds.filter((id) => !viewers.has(id.toString()));
+  if (targets.length === 0) return;
+
+  const now = new Date();
+  const ops = targets.map((recipient) => ({
+    updateOne: {
+      filter: { recipient, type: "room_message", isRead: false, "metadata.roomId": roomId },
+      update: {
+        $set: { sender: new mongoose.Types.ObjectId(sender), content, "metadata.roomName": room.name, updatedAt: now },
+        $inc: { "metadata.count": 1 },
+        $setOnInsert: { createdAt: now, __v: 0 },
+      },
+      upsert: true,
+    },
+  }));
+
+  try {
+    await Notification.collection.bulkWrite(ops, { ordered: false });
+  } catch (err) {
+    // Two messages racing to create the same room's first notification: the
+    // unique index rejects one insert - retrying turns it into an update.
+    if (err?.code !== 11000 && !err?.writeErrors?.every((e) => e.code === 11000)) throw err;
+    await Notification.collection.bulkWrite(ops, { ordered: false });
+  }
+
+  const notifications = await Notification.find({
+    recipient: { $in: targets }, type: "room_message", isRead: false, "metadata.roomId": roomId,
+  });
+  for (const notification of notifications) {
+    io.to(notification.recipient.toString()).emit("newNotification", notification);
+  }
+};
 
 export const handleMessages = (socket, io) => {
   const sender = socket.userId;
@@ -70,21 +112,15 @@ export const handleMessages = (socket, io) => {
         io.to(recipient._id.toString()).emit("receiveMessage", newMessage);
       }
 
-      // Same rule as createAndSendNotification: no notification if either
-      // side has blocked the other.
-      const notifiable = recipients.filter((r) => !senderBlocked.has(r._id.toString()));
-      const notifications = await Notification.insertMany(
-        notifiable.map((r) => ({
-          type: "room_message",
-          recipient: r._id,
-          sender,
-          content: content || "",
-          metadata: { roomId: room._id.toString() },
-        }))
-      );
-      for (const notification of notifications) {
-        io.to(notification.recipient.toString()).emit("newNotification", notification);
-      }
+      await notifyRoomMembers({
+        io,
+        room,
+        sender,
+        content: content || "",
+        // Same rule as createAndSendNotification: no notification if either
+        // side has blocked the other.
+        recipientIds: recipients.filter((r) => !senderBlocked.has(r._id.toString())).map((r) => r._id),
+      });
     } catch (err) {
       logger.error({ err, sender, roomId }, "sendPrivateMessage error");
       socket.emit("error", { message: "Failed to send message." });

@@ -1,5 +1,6 @@
 import Announcement from "../models/Announcement.js";
 import { sendError } from "../utils/errorResponse.js";
+import { isNonEmptyString } from "../utils/validation.js";
 
 export const getAnnouncements = async (req, res) => {
   try {
@@ -14,7 +15,8 @@ export const getAnnouncements = async (req, res) => {
 export const createAnnouncement = async (req, res) => {
   try {
     const { title, content } = req.body;
-    if (!title || !content) return res.status(400).json({ message: "Title and content are required" });
+    // Whitespace-only counted as "present" before, publishing a blank announcement.
+    if (!isNonEmptyString(title) || !isNonEmptyString(content)) return res.status(400).json({ message: "Title and content are required" });
 
     const announcement = await Announcement.create({ title, content, createdBy: req.user.id });
     res.status(201).json(announcement);

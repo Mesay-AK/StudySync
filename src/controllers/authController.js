@@ -8,9 +8,11 @@ import {generateRefreshToken,
         hashResetToken,
         tokenPayloadFor,
         isSessionCurrent,
+        verifyRefreshSignature,
 } from '../utils/Tokens/jwtTokens.js';
+import redisClient from '../config/redisClient.js';
 import { setAuthCookies, clearAuthCookies } from '../utils/Tokens/authCookies.js';
-import { sendError } from '../utils/errorResponse.js';
+import { sendError, errorBody } from '../utils/errorResponse.js';
 import { emailQueue } from '../queues/emailQueue.js';
 import { validateNewAccount, normalizeEmail } from '../utils/validation.js';
 
@@ -35,7 +37,7 @@ export const registerUser = async (req, res) => {
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
       const field = existingUser.email === email ? 'Email' : 'Username';
-      return res.status(400).json({ message: `${field} already in use` });
+      return res.status(400).json(errorBody(`${field} already in use`, 'ALREADY_IN_USE', { field: field.toLowerCase() }));
     }
 
     if (!isStrongPassword(password)) {
@@ -91,6 +93,25 @@ export const logInUser = async (req, res) => {
 
 
 
+const REFRESH_GRACE_SECONDS = Number(process.env.REFRESH_REUSE_GRACE_SECONDS) || 10;
+const graceKey = (sessionId) => `refreshGrace:${sessionId}`;
+
+// Two tabs (or a tab and a retry) often refresh with the SAME token at the
+// same moment. Strict rotation treated the second request as token theft and
+// revoked the whole session. Now only one request per token rotates; for a
+// few seconds afterwards, presenting that same token again returns the
+// token it was rotated into instead of revoking. Outside that window, reuse
+// is still treated as theft (validateRefreshToken).
+const waitForGraceToken = async (sessionId, timeoutMs = 3000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const token = await redisClient.get(graceKey(sessionId));
+    if (token) return token;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+};
+
 export const refreshToken = async (req, res) => {
   const oldRefreshToken = req.cookies.refreshToken;
   if (!oldRefreshToken) {
@@ -98,12 +119,30 @@ export const refreshToken = async (req, res) => {
   }
 
   try {
-    const decoded = await validateRefreshToken(oldRefreshToken);
+    const claimed = verifyRefreshSignature(oldRefreshToken);
 
-    // Rotate: invalidate the used refresh token and issue a new pair, kept
-    // in the same family so a later replay of this (now-stale) token is
-    // recognized as reuse instead of just "invalid".
-    await deleteRefreshToken(decoded.sessionId);
+    let decoded;
+    let nextRefreshToken = await redisClient.get(graceKey(claimed.sessionId));
+    if (!nextRefreshToken) {
+      const gotLock = await redisClient.set(`refreshLock:${claimed.sessionId}`, '1', 'NX', 'EX', REFRESH_GRACE_SECONDS);
+      if (!gotLock) {
+        // Another request is rotating this very token right now - use its result.
+        nextRefreshToken = await waitForGraceToken(claimed.sessionId);
+        if (!nextRefreshToken) throw new Error('Concurrent refresh did not complete');
+      }
+    }
+
+    if (nextRefreshToken) {
+      // Within the grace window: the rotated-into token must itself still be
+      // live (not logged out / revoked since).
+      decoded = await validateRefreshToken(nextRefreshToken);
+    } else {
+      decoded = await validateRefreshToken(oldRefreshToken);
+      // Rotate: invalidate the used refresh token and issue a new pair, kept
+      // in the same family so a later replay of this (now-stale) token is
+      // recognized as reuse instead of just "invalid".
+      await deleteRefreshToken(decoded.sessionId);
+    }
 
     // A refresh token must not outlive the account's standing: deleted,
     // banned, or credentials changed since it was issued.
@@ -115,9 +154,12 @@ export const refreshToken = async (req, res) => {
 
     const payload = tokenPayloadFor(user);
     const newAccessToken = generateAccessToken(payload);
-    const newRefreshToken = await generateRefreshToken(payload, decoded.familyId);
+    if (!nextRefreshToken) {
+      nextRefreshToken = await generateRefreshToken(payload, decoded.familyId);
+      await redisClient.set(graceKey(claimed.sessionId), nextRefreshToken, 'EX', REFRESH_GRACE_SECONDS);
+    }
 
-    setAuthCookies(res, newAccessToken, newRefreshToken);
+    setAuthCookies(res, newAccessToken, nextRefreshToken);
 
     return res.status(200).json({ accessToken: newAccessToken });
   } catch (error) {
@@ -228,8 +270,10 @@ export const changePassword = async (req, res) => {
     }
 
     const user = await User.findById(req.user.id).select('+password');
+    // 400, not 401: a wrong current password isn't an expired session, and
+    // a 401 made the frontend refresh the session and retry pointlessly.
     if (!user.password || typeof currentPassword !== 'string' || !(await comparePassword(currentPassword, user.password))) {
-      return res.status(401).json({ message: 'Current password is incorrect' });
+      return res.status(400).json({ message: 'Current password is incorrect' });
     }
 
     user.password = await hashPassword(newPassword);

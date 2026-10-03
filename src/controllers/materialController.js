@@ -4,6 +4,7 @@ import { sendError } from "../utils/errorResponse.js";
 import { clampPagination } from "../utils/pagination.js";
 import { isOptionalString } from "../utils/validation.js";
 import fs from "fs/promises";
+import Upload from "../models/Upload.js";
 import path from "path";
 import logger from "../utils/logger.js";
 
@@ -74,11 +75,13 @@ export const uploadMaterial = async (req, res) => {
       size: req.file.size,
     });
 
+    await Upload.create({ filename: req.file.filename, uploader: req.user.id, purpose: "material" });
+
     await logActivity({
       user: req.user.id,
       type: "material_uploaded",
       description: `Uploaded the material "${material.name}"`,
-      metadata: { materialId: material._id },
+      metadata: { materialId: material._id, name: material.name },
     });
 
     res.status(201).json(toClientShape(material, req.user.id));
@@ -93,7 +96,11 @@ export const getMaterials = async (req, res) => {
 
     const query = { isDeleted: false };
     if (subject && subject !== "all") query.subject = subject;
-    if (fileType && fileType !== "all") query.fileType = fileType;
+    // A comma-separated list selects a group (e.g. "doc,docx" for documents).
+    if (fileType && fileType !== "all") {
+      const types = fileType.split(",").map((t) => t.trim()).filter(Boolean);
+      query.fileType = types.length > 1 ? { $in: types } : types[0];
+    }
     if (search) query.$text = { $search: search };
 
     const sortMap = {
@@ -108,11 +115,16 @@ export const getMaterials = async (req, res) => {
     let materials;
 
     if (sortBy === "likes") {
-      // likedBy.length can't be sorted at the query level without aggregation -
-      // fetch matches, sort in memory, then paginate.
-      const all = await Material.find(query).populate("uploader", "username displayName");
-      all.sort((a, b) => b.likedBy.length - a.likedBy.length);
-      materials = all.slice(skip, skip + safeLimit);
+      // Sorted and paginated in the database (this used to load EVERY
+      // matching material into memory to sort by likedBy.length).
+      const page = await Material.aggregate([
+        { $match: query },
+        { $addFields: { likeCount: { $size: "$likedBy" } } },
+        { $sort: { likeCount: -1, createdAt: -1, _id: 1 } },
+        { $skip: skip },
+        { $limit: safeLimit },
+      ]);
+      materials = await Material.populate(page.map((doc) => Material.hydrate(doc)), { path: "uploader", select: "username displayName" });
     } else {
       materials = await Material.find(query)
         .populate("uploader", "username displayName")

@@ -23,6 +23,8 @@ export const socketAuthMiddleware = async (socket, next) => {
 
     socket.userId = user._id.toString();
     socket.user = user;
+    // When the handshake's access token expires (see config/socket.js).
+    socket.tokenExpiresAt = decoded.exp * 1000;
     next();
   } catch (err) {
     next(new Error('Authentication failed'));

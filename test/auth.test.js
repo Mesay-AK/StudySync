@@ -155,19 +155,51 @@ describe("refresh-token rotation", () => {
     expect((await api("/auth/me", { token: res.body.accessToken })).status).toBe(200);
   });
 
-  it("detects replay of a rotated refresh token and revokes the whole family", async () => {
+  it("detects replay of a rotated refresh token (after the reuse grace window) and revokes the whole family", async () => {
     const u = await createUser();
     const first = await api("/auth/refresh", { method: "POST", cookie: u.cookie });
     expect(first.status).toBe(200);
     const rotatedCookie = cookiesFrom(first.headers);
 
-    // Attacker replays the original (already rotated) token.
+    // Past REFRESH_REUSE_GRACE_SECONDS (2s in tests): an attacker replays the
+    // original, already-rotated token.
+    await sleep(2300);
     const replay = await api("/auth/refresh", { method: "POST", cookie: u.cookie });
     expect(replay.status).toBe(403);
 
     // ...which must also kill the legitimate user's current token.
     const legit = await api("/auth/refresh", { method: "POST", cookie: rotatedCookie });
     expect(legit.status).toBe(403);
+  });
+
+  it("within the grace window, re-presenting the just-rotated token returns the SAME new token (no revocation)", async () => {
+    const u = await createUser();
+    const first = await api("/auth/refresh", { method: "POST", cookie: u.cookie });
+    const again = await api("/auth/refresh", { method: "POST", cookie: u.cookie });
+    expect(first.status).toBe(200);
+    expect(again.status).toBe(200);
+    const token = (r) => cookieValue(cookiesFrom(r.headers), "refreshToken");
+    expect(token(again)).toBe(token(first));
+    // And the session carries on normally.
+    expect((await api("/auth/refresh", { method: "POST", cookie: cookiesFrom(again.headers) })).status).toBe(200);
+  });
+
+  it("five simultaneous refreshes with one token all succeed with the same new token", async () => {
+    const u = await createUser();
+    const results = await Promise.all(Array.from({ length: 5 }, () => api("/auth/refresh", { method: "POST", cookie: u.cookie })));
+    expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
+    const tokens = new Set(results.map((r) => cookieValue(cookiesFrom(r.headers), "refreshToken")));
+    expect(tokens.size).toBe(1);
+    const next = await api("/auth/refresh", { method: "POST", cookie: cookiesFrom(results[0].headers) });
+    expect(next.status).toBe(200);
+  });
+
+  it("the grace window cannot revive a session that was logged out", async () => {
+    const u = await createUser();
+    const first = await api("/auth/refresh", { method: "POST", cookie: u.cookie });
+    await api("/auth/logout", { method: "POST", cookie: cookiesFrom(first.headers) });
+    const replay = await api("/auth/refresh", { method: "POST", cookie: u.cookie });
+    expect(replay.status).toBe(403);
   });
 
   it("logout invalidates the refresh token server-side", async () => {
@@ -337,7 +369,9 @@ describe("change password", () => {
       token: u.token,
       body: { currentPassword: "Wrong!Pass1", newPassword: "N3w!Password" },
     });
-    expect(bad.status).toBe(401);
+    // 400, not 401: it's bad input, not an expired session (a 401 triggers
+    // the frontend's refresh-and-retry).
+    expect(bad.status).toBe(400);
 
     const good = await api("/auth/change-password", {
       method: "POST",
@@ -349,4 +383,29 @@ describe("change password", () => {
     const login = await api("/auth/login", { method: "POST", body: { email: u.email, password: "N3w!Password" } });
     expect(login.status).toBe(200);
   });
+});
+
+describe("email delivery retries", () => {
+  it("retries a failing email 3 times with backoff, then records it as failed", async () => {
+    // SMTP is unreachable in tests, so every attempt fails.
+    const u = await createUser();
+    const redis = getRedis();
+    await api("/auth/forgot-password", { method: "POST", body: { email: u.email } });
+    const id = await redis.get("bull:email:id");
+
+    let job = {};
+    const deadline = Date.now() + 25_000;
+    while (Date.now() < deadline) {
+      job = await redis.hgetall(`bull:email:${id}`);
+      if (job.finishedOn) break;
+      await sleep(500);
+    }
+    expect(job.name).toBe("password-reset");
+    // BullMQ stores attempts made as "atm".
+    expect(Number(job.atm ?? job.attemptsMade)).toBe(3);
+    expect(job.failedReason).toBe("Email sending failed");
+    // Exponential backoff (2s, then 4s): the three attempts span >= 6s.
+    expect(Number(job.finishedOn) - Number(job.timestamp)).toBeGreaterThanOrEqual(6000);
+    expect(await redis.zscore("bull:email:failed", id)).not.toBeNull();
+  }, 40_000);
 });

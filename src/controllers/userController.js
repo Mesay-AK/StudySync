@@ -1,12 +1,13 @@
 import { isUserOnline } from "../utils/socketHandlers/userHandlers.js";
 import User from "../models/User.js";
-import { sendError } from "../utils/errorResponse.js";
+import { sendError, errorBody } from "../utils/errorResponse.js";
 import { escapeRegex } from "../utils/escapeRegex.js";
 import { clampPagination } from "../utils/pagination.js";
 import { isValidObjectId } from "mongoose";
 import { removeUserFromAllRooms } from "../utils/roomMembership.js";
 import { disconnectUser } from "../utils/socketHandlers/safeOn.js";
 import { normalizeEmail } from "../utils/validation.js";
+import { SUPPORTED_LANGUAGES } from "../models/User.js";
 
 // What any logged-in user may see about someone else. Email, block list,
 // settings and admin/ban flags used to be returned to everyone by profile and
@@ -54,7 +55,7 @@ export const updateUserProfile = async (req, res) => {
 
     for (const key of allowedUpdates) {
       if (updates[key] !== undefined && typeof updates[key] !== "string") {
-        return res.status(400).json({ message: `${key} must be a string.` });
+        return res.status(400).json(errorBody(`${key} must be a string.`, 'MUST_BE_TEXT', { field: key }));
       }
     }
     if (updates.email !== undefined) updates.email = normalizeEmail(updates.email);
@@ -316,8 +317,8 @@ export const updateUserSettings = async (req, res) => {
     if (settings.darkMode !== undefined && typeof settings.darkMode !== "boolean") {
       return res.status(400).json({ message: "darkMode must be true or false." });
     }
-    if (settings.language !== undefined && typeof settings.language !== "string") {
-      return res.status(400).json({ message: "language must be a string." });
+    if (settings.language !== undefined && !SUPPORTED_LANGUAGES.includes(settings.language)) {
+      return res.status(400).json({ message: "Unsupported language." });
     }
 
     const user = await User.findById(userId);

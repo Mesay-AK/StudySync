@@ -83,6 +83,14 @@ describe("site-admin gate", () => {
 });
 
 describe("announcements", () => {
+  it("rejects blank, whitespace-only and non-string titles/content", async () => {
+    const admin = await createUser({ admin: true });
+    for (const body of [{}, { title: "  ", content: "c" }, { title: "t", content: "\n\t " }, { title: 5, content: "c" }]) {
+      const res = await api("/announcements", { method: "POST", token: admin.token, body });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
   it("admins see inactive announcements; regular users only see active ones", async () => {
     const admin = await createUser({ admin: true });
     const u = await createUser();

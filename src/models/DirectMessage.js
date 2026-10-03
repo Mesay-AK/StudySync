@@ -18,4 +18,7 @@ const DirectMessageSchema = new Schema({
 
 DirectMessageSchema.index({ content: "text", emojis: "text" });
 
+// Looked up per request by the /uploads access check.
+DirectMessageSchema.index({ "media.url": 1 });
+
 export default model("DirectMessage", DirectMessageSchema);

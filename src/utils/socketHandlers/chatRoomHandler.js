@@ -83,7 +83,7 @@ const handleChatRooms = (socket, io) => {
             user: userId,
             type: "room_joined",
             description: `Joined the study room "${room.name}"`,
-            metadata: { roomId: room._id },
+            metadata: { roomId: room._id, name: room.name },
           });
         }
       }

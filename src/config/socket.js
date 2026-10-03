@@ -42,6 +42,19 @@ const setupSocket = async (server) => {
   io.on("connection", (socket) => {
     logger.info({ userId: socket.userId, socketId: socket.id }, "Socket connected");
 
+    // Auth is only checked at handshake, so a socket used to outlive its
+    // access token indefinitely. End it when the token expires; the client
+    // refreshes its session and reconnects (the announcement tells it this
+    // is an expiry, not a ban - lib/socket.js on the frontend).
+    const expiresIn = Math.max(0, (socket.tokenExpiresAt ?? Infinity) - Date.now());
+    if (Number.isFinite(expiresIn)) {
+      const expiryTimer = setTimeout(() => {
+        socket.emit("session_expired");
+        socket.disconnect(true);
+      }, expiresIn);
+      socket.on("disconnect", () => clearTimeout(expiryTimer));
+    }
+
     handleUserConnection(socket, io);
     handleDirectMessages(socket, io);
     handleChatRooms(socket, io);

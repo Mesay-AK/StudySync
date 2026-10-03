@@ -10,6 +10,13 @@ const notificationSchema = new Schema({
   type: { type: String, enum: ["direct_message", "room_message", "request", "other"], default: "other" },
 }, { timestamps: true });
 
-notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ recipient: 1, updatedAt: -1 });
+// Room messages are coalesced into ONE unread notification per (recipient,
+// room) - see notifyRoomMembers. Enforced here so concurrent messages can't
+// create duplicates.
+notificationSchema.index(
+  { recipient: 1, "metadata.roomId": 1 },
+  { unique: true, partialFilterExpression: { type: "room_message", isRead: false } }
+);
 
 export default model("Notification", notificationSchema);

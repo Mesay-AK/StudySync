@@ -4,7 +4,7 @@ import User from "../models/User.js";
 import Report from "../models/Report.js";
 import ChatRoom from "../models/ChatRoom.js";
 import { hashPassword, isStrongPassword } from '../utils/passwordHelpers/password-helper.js';
-import { sendError } from '../utils/errorResponse.js';
+import { sendError, errorBody } from '../utils/errorResponse.js';
 import { validateNewAccount, normalizeEmail } from '../utils/validation.js';
 import { disconnectUser } from '../utils/socketHandlers/safeOn.js';
 import { purgeUserReferences } from './userController.js';
@@ -22,7 +22,7 @@ export const registerAdmin = async (req, res) => {
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
       const field = existingUser.email === email ? 'Email' : 'Username';
-      return res.status(400).json({ message: `${field} already in use` });
+      return res.status(400).json(errorBody(`${field} already in use`, 'ALREADY_IN_USE', { field: field.toLowerCase() }));
     }
 
     if (!isStrongPassword(password)) {

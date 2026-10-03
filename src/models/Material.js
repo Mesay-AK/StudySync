@@ -18,4 +18,7 @@ const MaterialSchema = new Schema({
 
 MaterialSchema.index({ name: "text", description: "text", tags: "text", subject: "text" });
 
+// Looked up per request by the /uploads access check.
+MaterialSchema.index({ fileUrl: 1 });
+
 export default model("Material", MaterialSchema);

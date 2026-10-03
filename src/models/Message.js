@@ -21,4 +21,7 @@ const MessageSchema = new Schema({
 
 MessageSchema.index({ content: "text", emojis: "text" });
 
+// Looked up per request by the /uploads access check.
+MessageSchema.index({ "media.url": 1 });
+
 export default model("Message", MessageSchema);

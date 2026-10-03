@@ -2,6 +2,7 @@ import express from "express";
 import {
   getAllPublicRooms,
   getMyRooms,
+  getInvitedRooms,
   getAllRoomsAdmin,
   getRoomById,
   createRoom,
@@ -29,6 +30,7 @@ chatRoomRoutes.get("/all", getAllPublicRooms);
 chatRoomRoutes.use(authenticate);
 
 chatRoomRoutes.get("/mine", getMyRooms);
+chatRoomRoutes.get("/invited", getInvitedRooms);
 chatRoomRoutes.get("/admin/all", requireAdmin, getAllRoomsAdmin);
 chatRoomRoutes.post("/create", createRoom);
 chatRoomRoutes.post("/join-public/:roomId", joinPublicRoom);

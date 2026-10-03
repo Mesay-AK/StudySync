@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;
 
+// Must match the frontend's LANGUAGES (src/lib/preferences.js).
+export const SUPPORTED_LANGUAGES = ["en", "es", "fr", "am", "ar"];
+
 const userSchema = Schema(
   {
     // lowercase/trim are a backstop - callers normalize explicitly via
@@ -29,8 +32,9 @@ const userSchema = Schema(
     isAdmin: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
     settings: {
-      darkMode: { type: Boolean, default: false },
-      language: { type: String, default: "en" },
+      // Dark is the app's original (and default) look; false = light theme.
+      darkMode: { type: Boolean, default: true },
+      language: { type: String, enum: SUPPORTED_LANGUAGES, default: "en" },
     }
 
   },

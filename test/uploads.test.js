@@ -110,6 +110,8 @@ describe("chat attachment upload", () => {
   });
 });
 
+const uniqSubject = () => `subj${Math.random().toString(36).slice(2, 10)}`;
+
 describe("study materials", () => {
   const upload = (user, extra = {}, file = fileForm("file", PNG, "diagram.png", "image/png", extra)) =>
     api("/materials", { method: "POST", token: user.token, form: file });
@@ -192,6 +194,18 @@ describe("study materials", () => {
     }
     expect(mismatches).toEqual([]);
   }, 60_000);
+
+  it("filters by a group of file types given as a comma-separated list", async () => {
+    const u = await createUser();
+    const subject = uniqSubject();
+    const docForm = fileForm("file", Buffer.from("plain notes"), "notes.txt", "text/plain", { subject });
+    await upload(u, {}, docForm);
+    await upload(u, { subject });
+    const both = await api(`/materials?subject=${subject}&fileType=txt,png`, { token: u.token });
+    expect(both.body.materials.map((m) => m.type).sort()).toEqual(["png", "txt"]);
+    const one = await api(`/materials?subject=${subject}&fileType=png`, { token: u.token });
+    expect(one.body.materials.map((m) => m.type)).toEqual(["png"]);
+  });
 
   it("does not let query-string operators widen the material filter", async () => {
     const u = await createUser();
