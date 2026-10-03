@@ -30,6 +30,9 @@ const userSchema = Schema(
     tokenVersion: { type: Number, default: 0 },
     blockedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
     isAdmin: { type: Boolean, default: false },
+    // Above admins (see utils/roles.js). Always also isAdmin. Granted only by
+    // scripts/make-admin.js - there is no API to create a super admin.
+    isSuperAdmin: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
     settings: {
       // Dark is the app's original (and default) look; false = light theme.

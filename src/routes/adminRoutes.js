@@ -6,15 +6,18 @@ import {
     deleteUser,
     toggleBanUser,
     promoteToRoomAdmin,
-    demoteFromRoomAdmin, 
+    demoteFromRoomAdmin,
+    setAdminRole,
 } from "../controllers/adminController.js";
 import { checkRoomAdmin } from "../middleware/adminMiddleware.js";
-import { authenticate, requireAdmin } from "../middleware/authMiddleware.js";
+import { authenticate, requireAdmin, requireSuperAdmin } from "../middleware/authMiddleware.js";
 
 const adminRouter = express.Router();
 
 // Site-wide admin actions: gated on the caller's own isAdmin flag.
-adminRouter.post("/adRegister", authenticate, requireAdmin, registerAdmin);
+// Creating and promoting admins: super admins only.
+adminRouter.post("/adRegister", authenticate, requireSuperAdmin, registerAdmin);
+adminRouter.patch("/role", authenticate, requireSuperAdmin, setAdminRole);
 adminRouter.get("/reports", authenticate, requireAdmin, viewReports);
 adminRouter.post("/resolve-report", authenticate, requireAdmin, resolveReport);
 adminRouter.post("/delete-user", authenticate, requireAdmin, deleteUser);

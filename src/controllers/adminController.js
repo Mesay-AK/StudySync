@@ -9,6 +9,7 @@ import { validateNewAccount, normalizeEmail } from '../utils/validation.js';
 import { disconnectUser } from '../utils/socketHandlers/safeOn.js';
 import { purgeUserReferences } from './userController.js';
 import { isValidObjectId } from 'mongoose';
+import { canManage, CANNOT_MANAGE_MESSAGE } from '../utils/roles.js';
 
 
 export const registerAdmin = async (req, res) => {
@@ -74,6 +75,10 @@ export const resolveReport = async (req, res) => {
     }
 
     if (action === "banUser" && report.targetUser) {
+      const target = await User.findById(report.targetUser).select("isAdmin isSuperAdmin");
+      if (target && !canManage(req.user, target)) {
+        return res.status(403).json({ message: CANNOT_MANAGE_MESSAGE });
+      }
       await User.findByIdAndUpdate(report.targetUser, { isBanned: true });
       disconnectUser(req.app.get("io"), report.targetUser);
     }
@@ -87,6 +92,40 @@ export const resolveReport = async (req, res) => {
   }
 };
 
+// Super admins only: grant or remove admin rights. Super admin status itself
+// is never changed here - only scripts/make-admin.js grants or revokes it.
+export const setAdminRole = async (req, res) => {
+  const { userId, isAdmin } = req.body;
+
+  try {
+    if (typeof isAdmin !== "boolean") {
+      return res.status(400).json({ message: "isAdmin must be true or false." });
+    }
+    if (!isValidObjectId(userId)) {
+      return res.status(400).json({ message: "A valid userId is required" });
+    }
+
+    const target = await User.findById(userId);
+    if (!target) return res.status(404).json({ message: "User not found" });
+    if (target.isSuperAdmin) {
+      return res.status(403).json({ message: "Super admins are managed with the make-admin script." });
+    }
+    if (String(target._id) === String(req.user._id)) {
+      return res.status(403).json({ message: CANNOT_MANAGE_MESSAGE });
+    }
+
+    target.isAdmin = isAdmin;
+    await target.save();
+
+    res.status(200).json({
+      message: isAdmin ? "User promoted to admin" : "Admin rights removed",
+      user: { _id: target._id, username: target.username, isAdmin: target.isAdmin, isSuperAdmin: target.isSuperAdmin },
+    });
+  } catch (error) {
+    return sendError(res, error, 'Failed to update admin role.');
+  }
+};
+
 // Ban or Unban user
 export const toggleBanUser = async (req, res) => {
   const { userId, ban = true } = req.body;
@@ -96,10 +135,16 @@ export const toggleBanUser = async (req, res) => {
       return res.status(400).json({ message: "ban must be true or false." });
     }
 
-    const user = await User.findByIdAndUpdate(userId, { isBanned: ban }, { new: true });
-    if (!user) {
+    const target = await User.findById(userId).select("isAdmin isSuperAdmin");
+    if (!target) {
       return res.status(404).json({ message: "User not found" });
     }
+    // Admins can't ban themselves, each other, or a super admin.
+    if (!canManage(req.user, target)) {
+      return res.status(403).json({ message: CANNOT_MANAGE_MESSAGE });
+    }
+
+    const user = await User.findByIdAndUpdate(userId, { isBanned: ban }, { new: true });
 
     // Socket auth only runs at handshake time - without this, a banned
     // user's already-open sockets kept sending messages.
@@ -119,6 +164,9 @@ export const deleteUser = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+    if (!canManage(req.user, user)) {
+      return res.status(403).json({ message: CANNOT_MANAGE_MESSAGE });
     }
 
     await user.deleteOne();

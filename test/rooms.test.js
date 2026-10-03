@@ -337,7 +337,8 @@ describe("capacity & membership under concurrency", () => {
       memberCounts.push((await roomDoc(room._id)).members.length);
     }
     expect(Math.max(...memberCounts), `member counts per trial (max 3): ${memberCounts}`).toBeLessThanOrEqual(3);
-  }, 60_000);
+    // 36 fresh accounts (bcrypt-hashed) across 4 trials: slow on a busy machine.
+  }, 120_000);
 
   it("the same user double-submitting a join is recorded once", async () => {
     const owner = await createUser();

@@ -97,6 +97,13 @@ export const updateUserProfile = async (req, res) => {
 export const deleteProfile = async (req, res) => {
   const { userId } = req.params;
   try {
+    const target = await User.findById(userId).select("isSuperAdmin");
+    if (!target) return res.status(404).json({ message: "User not found" });
+    // The platform must always keep at least one super admin.
+    if (target.isSuperAdmin && (await User.countDocuments({ isSuperAdmin: true })) <= 1) {
+      return res.status(400).json({ message: "The last super admin can't be deleted." });
+    }
+
     const user = await User.findByIdAndDelete(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
     await purgeUserReferences(req.app.get("io"), userId);
@@ -158,7 +165,8 @@ export const getAllUsers = async (req, res) => {
         { email: { $regex: safeSearch, $options: "i" } },
       ];
     }
-    if (role === "admin") query.isAdmin = true;
+    if (role === "superadmin") query.isSuperAdmin = true;
+    else if (role === "admin") query.isAdmin = true;
     else if (role === "student") query.isAdmin = false;
     if (status === "banned") query.isBanned = true;
     else if (status === "online") query.onlineStatus = "online";

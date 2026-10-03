@@ -27,8 +27,9 @@ describe("site-admin gate", () => {
     expect(stored.isBanned).toBe(false);
   });
 
-  it("lets an admin create another admin, ban/unban, and delete users", async () => {
-    const admin = await createUser({ admin: true });
+  // Creating admins needs a super admin since the role split (see roles.test.js).
+  it("lets a super admin create another admin, ban/unban, and delete users", async () => {
+    const admin = await createUser({ superAdmin: true });
     const target = await createUser();
 
     const email = `${uniq()}@x.test`;

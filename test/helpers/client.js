@@ -69,19 +69,19 @@ export const oid = (id) => new mongoose.Types.ObjectId(String(id));
 
 export const uniq = (prefix = "u") => `${prefix}${randomUUID().slice(0, 8)}`;
 
-// Registers + logs in a fresh user through the real API. `admin: true` flips
-// isAdmin directly in the DB (there is no public way to bootstrap the first
+// Registers + logs in a fresh user through the real API. `admin: true` /
+// `superAdmin: true` flip the role flags directly in the DB (there is no public way to bootstrap the first
 // admin - /admin/adRegister itself requires an admin).
-export const createUser = async ({ admin = false, password = STRONG_PASSWORD } = {}) => {
+export const createUser = async ({ admin = false, superAdmin = false, password = STRONG_PASSWORD } = {}) => {
   await clearRateLimits();
   const username = uniq("user");
   const email = `${username}@example.test`;
   const reg = await api("/auth/register", { method: "POST", body: { username, email, password } });
   if (reg.status !== 201) throw new Error(`register failed: ${reg.status} ${JSON.stringify(reg.body)}`);
 
-  if (admin) {
+  if (admin || superAdmin) {
     const db = await connectDb();
-    await db.collection("users").updateOne({ email }, { $set: { isAdmin: true } });
+    await db.collection("users").updateOne({ email }, { $set: { isAdmin: true, isSuperAdmin: superAdmin } });
   }
 
   const login = await api("/auth/login", { method: "POST", body: { email, password } });
