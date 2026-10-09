@@ -16,6 +16,7 @@ import { uploads } from "../middleware/mediaMiddleware.js"
 import { verifyFileContent } from "../middleware/verifyFileContent.js";
 import { authenticate } from "../middleware/authMiddleware.js"
 import { createRateLimiter } from "../config/rateLimiter.js";
+import { config } from "../config/env.js";
 
 const directMessageRouter = express.Router();
 
@@ -23,8 +24,8 @@ const directMessageRouter = express.Router();
 // an authenticated user can script unlimited uploads and exhaust disk space.
 const uploadRateLimiter = createRateLimiter({
   name: "chat-upload",
-  windowMs: 15 * 60 * 1000,
-  limit: 30,
+  windowMs: config.rateLimits.upload.windowMs,
+  limit: config.rateLimits.upload.max,
   message: { message: "Too many uploads, please try again later." },
 });
 

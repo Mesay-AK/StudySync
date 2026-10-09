@@ -8,6 +8,7 @@
 // never sending AUTH, rather than a config error).
 import 'dotenv/config';
 import './compat/slowBufferShim.js';
+import { config, configErrors } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
@@ -42,20 +43,23 @@ import { rejectOperatorKeys } from './middleware/requestGuards.js';
 import { authorizeUpload } from './middleware/uploadAccess.js';
 import './queues/emailWorker.js';
 
-// Refuse to boot with unset or copy-pasted-from-.env.example secrets - signing
-// tokens with a publicly-known value defeats JWT auth entirely.
-const PLACEHOLDER_SECRET = 'change-me';
-for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
-  if (!process.env[key] || process.env[key] === PLACEHOLDER_SECRET) {
-    logger.error(`Refusing to start: ${key} is missing or still set to the placeholder value. Set a real secret in your .env.`);
-    process.exit(1);
-  }
+// Refuse to boot with missing/invalid settings (src/config/env.js), listing
+// EVERY problem at once - including unset or copy-pasted-from-.env.example
+// JWT secrets, since signing tokens with a public value defeats auth.
+if (configErrors.length > 0) {
+  logger.error({ problems: configErrors }, `Refusing to start - fix these settings (in .env or the host's environment):\n  - ${configErrors.join('\n  - ')}`);
+  process.exit(1);
 }
 
 connectDB();
 
 const app = express();
 const server = http.createServer(app);
+
+// Behind a load balancer/reverse proxy (Render, Nginx, Cloudflare...), the
+// connecting IP is the proxy's. Without this, every visitor shared ONE rate-
+// limit bucket. Set TRUST_PROXY to the number of proxy hops (Render: 1).
+app.set('trust proxy', config.network.trustProxy);
 
 const io = await setupSocket(server);
 // Lets plain HTTP controllers (e.g. getUserStatus) query live presence via
@@ -103,6 +107,16 @@ app.get('/uploads/:filename/download', authenticate, authorizeUpload, (req, res)
   });
 });
 
+// Which pages may show an upload inside an <iframe> (attachment previews):
+// UPLOADS_FRAME_ANCESTORS, else the allowed frontend origins - not "*".
+const uploadFrameAncestors = (() => {
+  const { frameAncestors, corsOrigins, allowLocalhost } = config.network;
+  const sources = frameAncestors.length
+    ? frameAncestors
+    : [...corsOrigins, ...(allowLocalhost ? ['http://localhost:*', 'http://127.0.0.1:*'] : [])];
+  return sources.length ? sources.join(' ') : "'self'";
+})();
+
 // Uploads (including private DM attachments) used to be readable by anyone
 // on the internet who had the URL. They now require a logged-in user who is
 // allowed to see that particular file (authorizeUpload) - the
@@ -120,7 +134,7 @@ app.use(
   // these are non-executable file downloads, not interactive pages.
   (req, res, next) => {
     res.removeHeader('X-Frame-Options');
-    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${uploadFrameAncestors}`);
     next();
   },
   express.static(path.join(path.resolve(), 'uploads'))
@@ -138,6 +152,18 @@ app.use('/api/activity', activityRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/announcements', announcementRouter);
 app.use('/api/contact', contactRouter);
+
+// Public, non-secret settings the frontend adapts to at runtime (so changing
+// them in the backend's .env needs no frontend rebuild).
+app.get('/api/config', (req, res) => {
+  res.json({
+    auth: { google: config.google.enabled },
+    uploads: {
+      maxAttachmentBytes: config.uploads.maxAttachmentBytes,
+      maxMaterialBytes: config.uploads.maxMaterialBytes,
+    },
+  });
+});
 
 app.get('/', (req, res) => {
   res.send('API is running...');
@@ -197,5 +223,5 @@ app.use((err, req, res, next) => {
   return sendError(res, err, clientMessage, status);
 });
 
-const PORT = process.env.PORT || 3002;
+const PORT = config.port;
 server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));

@@ -1,5 +1,6 @@
 import multer from "multer";
 import fs from "fs";
+import { config } from "../config/env.js";
 
 const uploadDirectory = "./uploads";
 fs.mkdirSync(uploadDirectory, { recursive: true });
@@ -71,7 +72,7 @@ const mediaFileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter: mediaFileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }
+  limits: { fileSize: config.uploads.maxAttachmentBytes } // UPLOAD_MAX_ATTACHMENT_MB
 });
 
 export const uploads = upload.single("media");
@@ -91,7 +92,7 @@ const materialFileFilter = (req, file, cb) => {
 const materialUpload = multer({
   storage,
   fileFilter: materialFileFilter,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: config.uploads.maxMaterialBytes }, // UPLOAD_MAX_MATERIAL_MB
 });
 
 export const materialUploads = materialUpload.single("file");

@@ -21,14 +21,13 @@ const freePort = () =>
     srv.on("error", reject);
   });
 
-export const startExtraServer = async () => {
+// `overrides` replace/add settings; a value of undefined removes one.
+export const startExtraServer = async (overrides = {}) => {
   const port = await freePort();
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "studysync-e2e-b-"));
   const mainBase = inject("baseUrl");
   const entry = path.join(backendRoot, process.env.TEST_SERVER_ENTRY || "src/index.js");
-  const child = spawn(process.execPath, ["--enable-source-maps", entry], {
-    cwd: workDir,
-    env: {
+  const env = {
       PATH: process.env.PATH,
       NODE_ENV: "test",
       LOG_LEVEL: "warn",
@@ -48,13 +47,15 @@ export const startExtraServer = async () => {
       GOOGLE_CLIENT_SECRET: "test",
       GOOGLE_CALLBACK_URL: `${mainBase}/api/auth/google/callback`,
       REFRESH_REUSE_GRACE_SECONDS: "2",
-    },
-    stdio: "ignore",
-  });
+      ...overrides,
+  };
+  for (const [key, value] of Object.entries(env)) if (value === undefined) delete env[key];
+  const child = spawn(process.execPath, ["--enable-source-maps", entry], { cwd: workDir, env, stdio: "ignore" });
 
   const baseUrl = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null) throw new Error(`extra server exited with code ${child.exitCode}`);
     try {
       const res = await fetch(`${baseUrl}/health`);
       if (res.status === 200 && (await res.json()).redis === "up") break;

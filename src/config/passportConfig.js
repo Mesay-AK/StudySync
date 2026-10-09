@@ -1,14 +1,21 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import User from '../models/User.js';
+import { config } from './env.js';
 import { normalizeEmail } from '../utils/validation.js';
 
-passport.use(
+// Google sign-in is optional: only registered when GOOGLE_CLIENT_ID,
+// GOOGLE_CLIENT_SECRET and GOOGLE_CALLBACK_URL are all set. (The strategy
+// throws at construction without a client id, which used to stop the whole
+// server from starting even for deployments that never use Google.)
+export const googleEnabled = config.google.enabled;
+
+if (googleEnabled) passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      clientID: config.google.clientId,
+      clientSecret: config.google.clientSecret,
+      callbackURL: config.google.callbackUrl,
     },
     async (token, tokenSecret, profile, done) => {
       try {

@@ -7,12 +7,21 @@ import { handleMessages } from "../utils/socketHandlers/messageHandler.js";
 import { handleChatRooms } from "../utils/socketHandlers/chatRoomHandler.js";
 import { handleTypingIndicators } from "../utils/socketHandlers/typingHandlers.js";
 import { corsOrigin } from "./corsOrigin.js";
+import { config } from "./env.js";
 import redisClient from "./redisClient.js";
 import logger from "../utils/logger.js";
 
 const setupSocket = async (server) => {
   const io = new Server(server, {
     cors: { origin: corsOrigin, credentials: true },
+    // `cors` only sets response headers, and browsers don't apply CORS to
+    // WebSocket upgrades at all - so without this, any website could open a
+    // live connection carrying a visitor's (SameSite=None) cookies. Refuse
+    // browser origins that aren't allowed; no Origin = not a browser page.
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      callback(null, !origin || config.network.isAllowedOrigin(origin));
+    },
   });
 
   // Without this, a message/notification emitted from the instance a sender

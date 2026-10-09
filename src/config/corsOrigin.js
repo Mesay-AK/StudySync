@@ -1,20 +1,15 @@
-// In development, the frontend's dev-server port isn't stable (Vite picks the
-// next free port whenever the configured one is already in use), so pinning
-// CORS to a single FRONTEND_URL breaks the moment a second dev server is
-// running. Allow any localhost/127.0.0.1 origin in dev; in production, only
-// the exact configured FRONTEND_URL is allowed.
-const isLocalhostOrigin = (origin) => /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+import { config } from './env.js';
 
+// Who may call this API from a browser (and open its Socket.IO connection):
+//   - FRONTEND_URL, plus everything in CORS_ORIGINS (comma-separated; exact
+//     origins or wildcard subdomains like https://*.example.com);
+//   - any localhost/127.0.0.1 port when CORS_ALLOW_LOCALHOST is on (the
+//     default outside production - Vite picks a new port whenever the usual
+//     one is busy).
 export const corsOrigin = (origin, callback) => {
   if (!origin) return callback(null, true); // same-origin / non-browser requests (curl, server-to-server)
 
-  if (process.env.NODE_ENV !== 'production' && isLocalhostOrigin(origin)) {
-    return callback(null, true);
-  }
-
-  if (origin === process.env.FRONTEND_URL) {
-    return callback(null, true);
-  }
+  if (config.network.isAllowedOrigin(origin)) return callback(null, true);
 
   // Not an Error: that bubbled to the global error handler as a 500 (and an
   // error log line) for every request from a foreign origin. Answering with no

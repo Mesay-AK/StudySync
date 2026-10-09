@@ -1,5 +1,6 @@
 import express from "express";
 import { createRateLimiter } from "../config/rateLimiter.js";
+import { config } from "../config/env.js";
 import { submitContactMessage, getContactMessages, markContactMessageRead } from "../controllers/contactController.js";
 import { authenticate, requireAdmin } from "../middleware/authMiddleware.js";
 
@@ -9,8 +10,8 @@ const contactRouter = express.Router();
 // per process, multiplying the limit by the number of running instances.
 const contactRateLimiter = createRateLimiter({
   name: "contact",
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
+  windowMs: config.rateLimits.contact.windowMs,
+  limit: config.rateLimits.contact.max,
   message: { message: "Too many messages sent. Please try again later." },
 });
 
